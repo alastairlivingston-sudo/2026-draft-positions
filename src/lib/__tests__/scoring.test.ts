@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateEventPoints, DEFAULT_SCORING_VALUES, isEventEligible } from "@/lib/scoring";
-import type { SquadAsset } from "@/lib/types";
+import { calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES, isEventEligible } from "@/lib/scoring";
+import type { Match, SquadAsset } from "@/lib/types";
 
 type Asset = Pick<SquadAsset, "assetType" | "position">;
 
@@ -79,5 +79,65 @@ describe("calculateEventPoints", () => {
     expect(isEventEligible(team, "goal")).toBe(false);
     expect(calculateEventPoints("goal", team, DEFAULT_SCORING_VALUES)).toBe(0);
     expect(calculateEventPoints("yellow_card", team, DEFAULT_SCORING_VALUES)).toBe(0);
+  });
+});
+
+describe("computeMatchResultEvents", () => {
+  const baseMatch: Match = {
+    id: "m99",
+    stage: "Group Stage · Matchday 1",
+    homeTeam: "France",
+    homeCountryCode: "FR",
+    awayTeam: "Morocco",
+    awayCountryCode: "MA",
+    kickoff: "2026-06-20T18:00:00Z",
+    status: "completed",
+    homeScore: 3,
+    awayScore: 0,
+    minute: 90,
+    venue: "Test Stadium",
+    locked: false,
+  };
+
+  const franceTeam: SquadAsset = { id: "asset-france-team", managerId: "lev", slot: 1, name: "France", country: "France", countryCode: "FR", position: "Team", assetType: "team" };
+  const moroccoTeam: SquadAsset = { id: "asset-morocco-team", managerId: "josh", slot: 1, name: "Morocco", country: "Morocco", countryCode: "MA", position: "Team", assetType: "team" };
+  const franceDefender: SquadAsset = { id: "asset-france-def", managerId: "lev", slot: 2, name: "Saliba", country: "France", countryCode: "FR", position: "Defender", assetType: "player" };
+  const franceStriker: SquadAsset = { id: "asset-france-str", managerId: "lev", slot: 3, name: "Mbappe", country: "France", countryCode: "FR", position: "Striker", assetType: "player" };
+  const moroccoKeeper: SquadAsset = { id: "asset-morocco-gk", managerId: "josh", slot: 2, name: "Bounou", country: "Morocco", countryCode: "MA", position: "Goalkeeper", assetType: "player" };
+
+  const squadAssets = [franceTeam, moroccoTeam, franceDefender, franceStriker, moroccoKeeper];
+
+  it("returns no events for a match with no result yet", () => {
+    const upcoming: Match = { ...baseMatch, status: "upcoming", homeScore: null, awayScore: null, minute: null };
+    expect(computeMatchResultEvents(upcoming, squadAssets)).toEqual([]);
+  });
+
+  it("awards team_win and team_scored_3plus to the winning team asset", () => {
+    const events = computeMatchResultEvents(baseMatch, squadAssets);
+    const franceEvents = events.filter((e) => e.assetId === franceTeam.id);
+    expect(franceEvents.map((e) => e.type)).toEqual(expect.arrayContaining(["team_win", "team_scored_3plus"]));
+  });
+
+  it("awards team_loss and team_conceded_3plus to the losing team asset", () => {
+    const events = computeMatchResultEvents(baseMatch, squadAssets);
+    const moroccoEvents = events.filter((e) => e.assetId === moroccoTeam.id);
+    expect(moroccoEvents.map((e) => e.type)).toEqual(expect.arrayContaining(["team_loss", "team_conceded_3plus"]));
+  });
+
+  it("awards a clean sheet to defenders/goalkeepers on the side that conceded 0", () => {
+    const events = computeMatchResultEvents(baseMatch, squadAssets);
+    expect(events.filter((e) => e.assetId === franceDefender.id).map((e) => e.type)).toEqual(["clean_sheet"]);
+    expect(events.some((e) => e.assetId === moroccoKeeper.id)).toBe(false);
+  });
+
+  it("does not award a clean sheet to strikers/midfielders", () => {
+    const events = computeMatchResultEvents(baseMatch, squadAssets);
+    expect(events.some((e) => e.assetId === franceStriker.id)).toBe(false);
+  });
+
+  it("awards neither team_win nor team_loss for a draw", () => {
+    const draw: Match = { ...baseMatch, homeScore: 1, awayScore: 1 };
+    const events = computeMatchResultEvents(draw, squadAssets);
+    expect(events.some((e) => e.type === "team_win" || e.type === "team_loss")).toBe(false);
   });
 });

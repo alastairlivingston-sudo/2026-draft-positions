@@ -9,13 +9,14 @@ import {
   SEED_MATCHES,
   SEED_SQUAD_ASSETS,
 } from "@/lib/data/seed";
-import { calculateEventPoints, DEFAULT_SCORING_VALUES } from "@/lib/scoring";
+import { calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES } from "@/lib/scoring";
 import { getAssetPoints, getManagerTotal, type LeagueData } from "@/lib/selectors";
 import type {
   AuditAction,
   AuditLogEntry,
   FantasyEvent,
   FantasyEventType,
+  Match,
   ManualAdjustment,
   RawApiEvent,
   ScoringValues,
@@ -70,6 +71,14 @@ export interface LeagueStore extends LeagueData {
   toggleMatchLock: (matchId: string, actor?: string) => void;
 
   ingestApiEvents: (events: RawApiEvent[], source: "api" | "mock", actor?: string) => number;
+
+  /**
+   * Merges fresh status/score/minute for tracked matches from a live
+   * provider into the store (skipping locked matches). For any match
+   * newly reported as "completed", also computes and ingests its
+   * result-based events (clean sheets, team win/loss/3+ bonuses).
+   */
+  syncMatches: (apiMatches: Match[]) => void;
 
   resetToSeed: () => void;
 }
@@ -351,6 +360,37 @@ export const useLeagueStore = create<LeagueStore>()(
           apiEventCache: [...state.apiEventCache, ...newHashes],
         });
         return newEvents.length;
+      },
+
+      syncMatches: (apiMatches) => {
+        const state = get();
+        const apiById = new Map(apiMatches.map((m) => [m.id, m]));
+        let resultEvents: RawApiEvent[] = [];
+
+        const matches = state.matches.map((match) => {
+          if (match.locked) return match;
+          const apiMatch = apiById.get(match.id);
+          if (!apiMatch) return match;
+
+          const updated: Match = {
+            ...match,
+            status: apiMatch.status,
+            homeScore: apiMatch.homeScore,
+            awayScore: apiMatch.awayScore,
+            minute: apiMatch.minute,
+          };
+
+          if (match.status !== "completed" && updated.status === "completed") {
+            resultEvents = [...resultEvents, ...computeMatchResultEvents(updated, state.squadAssets)];
+          }
+
+          return updated;
+        });
+
+        set({ matches });
+        if (resultEvents.length > 0) {
+          get().ingestApiEvents(resultEvents, "api");
+        }
       },
 
       resetToSeed: () => set({ ...initialState }),

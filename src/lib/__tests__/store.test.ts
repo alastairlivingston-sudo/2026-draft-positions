@@ -84,6 +84,51 @@ describe("updateScoringValues", () => {
   });
 });
 
+describe("syncMatches", () => {
+  it("updates match status/score and ingests result events for a newly-completed match", () => {
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m6")!;
+    expect(before.status).toBe("upcoming");
+
+    const polakBefore = getManagerTotal(useLeagueStore.getState(), "polak");
+
+    useLeagueStore.getState().syncMatches([
+      { ...before, status: "completed", homeScore: 3, awayScore: 1, minute: 90 },
+    ]);
+
+    const state = useLeagueStore.getState();
+    const after = state.matches.find((m) => m.id === "m6")!;
+    expect(after.status).toBe("completed");
+    expect(after.homeScore).toBe(3);
+    expect(after.awayScore).toBe(1);
+
+    // Norway (polak-8, a "Team" asset) won and scored 3+.
+    const norwayEvents = state.fantasyEvents.filter((e) => e.assetId === "polak-8" && e.matchId === "m6");
+    expect(norwayEvents.map((e) => e.type)).toEqual(expect.arrayContaining(["team_win", "team_scored_3plus"]));
+    expect(getManagerTotal(state, "polak")).toBe(polakBefore + 2);
+  });
+
+  it("does not duplicate result events when synced again", () => {
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m6")!;
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 3, awayScore: 1, minute: 90 }]);
+
+    const afterFirst = useLeagueStore.getState().fantasyEvents.length;
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 3, awayScore: 1, minute: 90 }]);
+
+    expect(useLeagueStore.getState().fantasyEvents.length).toBe(afterFirst);
+  });
+
+  it("does not modify locked matches", () => {
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m1")!;
+    expect(before.locked).toBe(true);
+
+    useLeagueStore.getState().syncMatches([{ ...before, homeScore: 99, awayScore: 99 }]);
+
+    const after = useLeagueStore.getState().matches.find((m) => m.id === "m1")!;
+    expect(after.homeScore).toBe(before.homeScore);
+    expect(after.awayScore).toBe(before.awayScore);
+  });
+});
+
 describe("audit log", () => {
   it("records manual adjustments", () => {
     const before = useLeagueStore.getState().auditLog.length;

@@ -1,4 +1,4 @@
-import type { FantasyEventType, Position, ScoringValues, SquadAsset } from "@/lib/types";
+import type { FantasyEventType, Match, Position, RawApiEvent, ScoringValues, SquadAsset } from "@/lib/types";
 
 /** Default scoring values applied when the league is first created. */
 export const DEFAULT_SCORING_VALUES: ScoringValues = {
@@ -37,7 +37,7 @@ export const PLAYER_ONLY_EVENTS: FantasyEventType[] = [
 /** All loggable fantasy event types (excludes manual_adjustment, which has its own flow). */
 export const LOGGABLE_EVENT_TYPES: FantasyEventType[] = [...PLAYER_ONLY_EVENTS, ...TEAM_ONLY_EVENTS];
 
-const CLEAN_SHEET_POSITIONS: Position[] = ["Goalkeeper", "Defender"];
+export const CLEAN_SHEET_POSITIONS: Position[] = ["Goalkeeper", "Defender"];
 
 /**
  * Whether a given event type can ever apply to this asset.
@@ -108,6 +108,44 @@ export function buildEventHash(params: {
   detail: string;
 }): string {
   return [params.fixtureId, params.assetId, params.minute, params.type, params.detail].join(":");
+}
+
+/**
+ * Derives the result-based fantasy events - clean sheets and team
+ * win/loss/3-or-more bonuses - for every squad asset whose country
+ * played in a completed match. Used to auto-score those bonuses once a
+ * live provider reports a final score, without needing any per-asset
+ * API ID mapping (matched purely on `SquadAsset.country`).
+ */
+export function computeMatchResultEvents(match: Match, squadAssets: SquadAsset[]): RawApiEvent[] {
+  if (match.homeScore === null || match.awayScore === null) return [];
+
+  const sides = [
+    { team: match.homeTeam, scored: match.homeScore, conceded: match.awayScore },
+    { team: match.awayTeam, scored: match.awayScore, conceded: match.homeScore },
+  ];
+
+  const events: RawApiEvent[] = [];
+  for (const side of sides) {
+    for (const asset of squadAssets.filter((a) => a.country === side.team)) {
+      if (asset.assetType === "team") {
+        if (side.scored > side.conceded) {
+          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_win", minute: 90, detail: `${side.team} win ${side.scored}-${side.conceded}` });
+        } else if (side.scored < side.conceded) {
+          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_loss", minute: 90, detail: `${side.team} lose ${side.scored}-${side.conceded}` });
+        }
+        if (side.scored >= 3) {
+          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_scored_3plus", minute: 90, detail: `${side.team} score ${side.scored}` });
+        }
+        if (side.conceded >= 3) {
+          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_conceded_3plus", minute: 90, detail: `${side.team} concede ${side.conceded}` });
+        }
+      } else if (side.conceded === 0 && CLEAN_SHEET_POSITIONS.includes(asset.position)) {
+        events.push({ fixtureId: match.id, assetId: asset.id, type: "clean_sheet", minute: 90, detail: `${side.team} keep a clean sheet` });
+      }
+    }
+  }
+  return events;
 }
 
 export const SCORING_LABELS: Record<keyof ScoringValues, { label: string; description: string; appliesTo: string }> = {

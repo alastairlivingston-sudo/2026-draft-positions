@@ -64,6 +64,7 @@ has a working default:
 | `ADMIN_PASSWORD` | `worldcup2026` | Password for `/league/world-cup-draft/admin`. |
 | `NEXT_PUBLIC_USE_MOCK_DATA` | `true` | Set to `false` to use the API-Football provider instead of mock live events. |
 | `API_FOOTBALL_KEY` | _(none)_ | API key for [API-Football](https://www.api-football.com/), used by `src/lib/api/api-football-provider.ts`. |
+| `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | Live-poll interval in ms. Increase this (e.g. `600000` = 10 min) on API-Football's free tier to stay within its 100 requests/day quota. |
 | `NEXT_PUBLIC_SUPABASE_URL` | _(none)_ | For a future Supabase-backed store (see `supabase/schema.sql`). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | _(none)_ | Same as above. |
 
@@ -91,8 +92,9 @@ src/
     selectors.ts              # derived state (leaderboard, feeds, etc.)
     store/league-store.ts     # Zustand store + admin actions + audit log
     data/seed.ts              # seed managers, squads, matches, events
+    data/api-football-mapping.ts  # fixture/player ID map for live API mode
     api/                       # mock + API-Football provider adapters
-    hooks/use-live-polling.ts  # polls live events every 60s
+    hooks/use-live-polling.ts  # polls match status + live events
     auth.ts                    # admin password/session helpers
 supabase/schema.sql          # Supabase schema for a future backend
 ```
@@ -122,17 +124,31 @@ to team rows - enforced in `src/lib/scoring.ts`.
 
 ## Live data
 
-`src/lib/hooks/use-live-polling.ts` polls `getApiProvider().getLiveEvents()`
-every 60 seconds while any match is `live`, and ingests new events via
-`ingestApiEvents`, which dedupes on `fixtureId:assetId:minute:type:detail`.
+`src/lib/hooks/use-live-polling.ts` polls the active provider every
+`NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` (default 60s):
+
+1. `getMatches()` - refreshes status/score/minute for tracked matches
+   via the `syncMatches` store action (locked matches are skipped). The
+   first time a match flips to `completed`, `computeMatchResultEvents`
+   (`src/lib/scoring.ts`) derives its clean-sheet and team
+   win/loss/3+ bonus events from the final score - no ID mapping
+   needed for these.
+2. While any match is `live`, `getLiveEvents()` - new player events
+   (goals, assists, cards, own goals, missed penalties), ingested via
+   `ingestApiEvents`, which dedupes on `fixtureId:assetId:minute:type:detail`.
 
 - **Mock mode (default)**: `src/lib/api/mock-provider.ts` reveals a
   scripted set of events for the live match (`m4`, Spain vs Ivory
   Coast) over time, so you can see the leaderboard update live.
 - **API-Football mode**: set `NEXT_PUBLIC_USE_MOCK_DATA=false` and
-  `API_FOOTBALL_KEY`. `src/lib/api/api-football-provider.ts` is a
-  stub with the integration points documented inline - implement
-  `getMatches()`/`getLiveEvents()` against the real API.
+  `API_FOOTBALL_KEY`. `src/lib/api/api-football-provider.ts` calls
+  API-Football's `/fixtures` and `/fixtures/events` endpoints for the
+  fixtures/players listed in `src/lib/data/api-football-mapping.ts` -
+  fill that file in with your World Cup 2026 fixture IDs and your
+  squads' player IDs (instructions are in the file's header comment).
+  Until it has entries, the app behaves as if running in mock mode.
+  Note: penalty saves aren't reported as a distinct API-Football event
+  and still need to be logged manually from the admin dashboard.
 
 ## Testing
 
@@ -171,15 +187,21 @@ leaderboard page all point at that URL.
 - **Admin auth is a single shared password**, not per-user accounts.
   `src/lib/auth.ts` is structured so it can be swapped for Supabase
   Auth + a role check without changing call sites.
-- **API-Football integration is a stub.** Mock data demonstrates the
-  full live-update flow (polling, dedup, leaderboard movement).
+- **API-Football integration needs ID mapping.** The provider is fully
+  implemented (`src/lib/api/api-football-provider.ts`), but
+  `src/lib/data/api-football-mapping.ts` ships empty - fixtures and
+  players won't resolve until you fill in those IDs. Penalty saves
+  also have no API event and need manual entry either way.
+- **Free-tier rate limits are tight.** API-Football's free plan allows
+  100 requests/day; `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` should be set
+  high enough (e.g. 10 min) to stay under that across a full match day.
 
 ## Suggested next improvements
 
 - Wire up `supabase/schema.sql` and replace the Zustand store with
   Supabase reads + server actions, so all viewers share live state.
-- Implement `ApiFootballProvider` against real fixtures and map
-  API-Football player/team IDs to `squad_assets.id`.
+- Fill in `src/lib/data/api-football-mapping.ts` with real fixture and
+  player IDs for your league's squads.
 - Add Supabase Auth for admin login and per-action audit identities.
 - Add push notifications / toasts for live scoring events.
 - Add a draft/squad-editing flow for future seasons.
