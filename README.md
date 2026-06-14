@@ -63,8 +63,9 @@ has a working default:
 | --- | --- | --- |
 | `ADMIN_PASSWORD` | `worldcup2026` | Password for `/league/world-cup-draft/admin`. |
 | `NEXT_PUBLIC_USE_MOCK_DATA` | `true` | Set to `false` to use the API-Football provider instead of mock live events. |
-| `API_FOOTBALL_KEY` | _(none)_ | API key for [API-Football](https://www.api-football.com/), used by `src/lib/api/api-football-provider.ts`. |
-| `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | Live-poll interval in ms. Increase this (e.g. `600000` = 10 min) on API-Football's free tier to stay within its 100 requests/day quota. |
+| `API_FOOTBALL_KEY` | _(none)_ | API key for [API-Football](https://www.api-football.com/), used server-side by `src/app/api/live/route.ts`. |
+| `LIVE_DATA_CACHE_SECONDS` | `3600` | How long `/api/live` caches the upstream provider response, shared across all clients. Keeps API-Football usage to ~24/(hours) requests/day regardless of how many browsers are open. |
+| `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | How often the browser polls `/api/live`, in ms. Only affects UI freshness - the upstream call is cached per `LIVE_DATA_CACHE_SECONDS` above. |
 | `NEXT_PUBLIC_SUPABASE_URL` | _(none)_ | For a future Supabase-backed store (see `supabase/schema.sql`). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | _(none)_ | Same as above. |
 
@@ -84,6 +85,7 @@ src/
       cast/                  # full-screen cast mode (no nav)
       layout.tsx             # live-polling provider
     api/admin/login|logout/  # admin session cookie endpoints
+    api/live/route.ts       # cached live-data endpoint (see "Live data")
   components/
     leaderboard/, events/, matches/, squad/, admin/, shared/, ui/
   lib/
@@ -124,24 +126,32 @@ to team rows - enforced in `src/lib/scoring.ts`.
 
 ## Live data
 
-`src/lib/hooks/use-live-polling.ts` polls the active provider every
-`NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` (default 60s):
+`src/lib/hooks/use-live-polling.ts` polls `/api/live`
+(`src/app/api/live/route.ts`) every `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS`
+(default 60s). That route calls the active provider and caches the
+result for `LIVE_DATA_CACHE_SECONDS` (default 1 hour) via
+`unstable_cache`, so the response is shared across every client - the
+upstream provider is only hit once per cache window, no matter how many
+browsers are polling.
 
-1. `getMatches()` - refreshes status/score/minute for tracked matches
-   via the `syncMatches` store action (locked matches are skipped). The
+On each response:
+
+1. `matches` - refreshes status/score/minute for tracked matches via
+   the `syncMatches` store action (locked matches are skipped). The
    first time a match flips to `completed`, `computeMatchResultEvents`
    (`src/lib/scoring.ts`) derives its clean-sheet and team
    win/loss/3+ bonus events from the final score - no ID mapping
    needed for these.
-2. While any match is `live`, `getLiveEvents()` - new player events
-   (goals, assists, cards, own goals, missed penalties), ingested via
+2. `events` - new player events (goals, assists, cards, own goals,
+   missed penalties) for any live match, ingested via
    `ingestApiEvents`, which dedupes on `fixtureId:assetId:minute:type:detail`.
 
 - **Mock mode (default)**: `src/lib/api/mock-provider.ts` reveals a
   scripted set of events for the live match (`m4`, Spain vs Ivory
   Coast) over time, so you can see the leaderboard update live.
 - **API-Football mode**: set `NEXT_PUBLIC_USE_MOCK_DATA=false` and
-  `API_FOOTBALL_KEY`. `src/lib/api/api-football-provider.ts` calls
+  `API_FOOTBALL_KEY` (server-side env vars only - never expose this key
+  to the browser). `src/lib/api/api-football-provider.ts` calls
   API-Football's `/fixtures` and `/fixtures/events` endpoints for the
   fixtures/players listed in `src/lib/data/api-football-mapping.ts` -
   fill that file in with your World Cup 2026 fixture IDs and your
