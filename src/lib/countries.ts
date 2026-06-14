@@ -1,0 +1,45 @@
+// Maps the country/team names used in squads & fixtures to the ISO-3166
+// alpha-2 codes (or special GB-* codes) used to render flag emoji.
+export const COUNTRY_CODES: Record<string, string> = {
+  Argentina: "AR",
+  England: "GB-ENG",
+  Tunisia: "TN",
+  Austria: "AT",
+  Korea: "KR",
+  Japan: "JP",
+  "Saudi Arabia": "SA",
+  Qatar: "QA",
+  Haiti: "HT",
+  Australia: "AU",
+  "Cape Verde": "CV",
+  Netherlands: "NL",
+  Holland: "NL",
+  Mexico: "MX",
+  Algeria: "DZ",
+  Ghana: "GH",
+  Norway: "NO",
+  Senegal: "SN",
+  USA: "US",
+  Jordan: "JO",
+  Canada: "CA",
+  Belgium: "BE",
+  Brazil: "BR",
+  France: "FR",
+  Ecuador: "EC",
+  Scotland: "GB-SCT",
+  Curacao: "CW",
+  Germany: "DE",
+  Iran: "IR",
+  Uruguay: "UY",
+  Croatia: "HR",
+  Spain: "ES",
+  "Ivory Coast": "CI",
+  Switzerland: "CH",
+  Morocco: "MA",
+  Panama: "PA",
+  "South Africa": "ZA",
+};
+
+export function countryCode(country: string): string {
+  return COUNTRY_CODES[country] ?? "XX";
+}

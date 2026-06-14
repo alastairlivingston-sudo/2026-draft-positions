@@ -1,0 +1,13 @@
+{
+  "name": "World Cup Draft Fantasy League",
+  "short_name": "WC Draft",
+  "description": "Live fantasy points tracker for the World Cup Draft private league.",
+  "start_url": "/league/world-cup-draft",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#16203a",
+  "theme_color": "#16203a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
