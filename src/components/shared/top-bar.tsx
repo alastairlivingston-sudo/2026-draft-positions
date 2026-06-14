@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, CalendarDays, Cast, LayoutDashboard, ScrollText, Trophy } from "lucide-react";
 
+import { LiveStatusIndicator } from "@/components/shared/live-status-indicator";
 import { cn } from "@/lib/utils";
 
 const BASE = "/league/world-cup-draft";
@@ -52,14 +53,17 @@ export function TopBar() {
           })}
         </nav>
 
-        <Link
-          href={`${BASE}/cast`}
-          className="flex items-center gap-1.5 rounded-full border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-          target="_blank"
-        >
-          <Cast className="h-4 w-4" />
-          <span className="hidden sm:inline">Cast mode</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <LiveStatusIndicator />
+          <Link
+            href={`${BASE}/cast`}
+            className="flex items-center gap-1.5 rounded-full border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            target="_blank"
+          >
+            <Cast className="h-4 w-4" />
+            <span className="hidden sm:inline">Cast mode</span>
+          </Link>
+        </div>
       </div>
     </header>
   );

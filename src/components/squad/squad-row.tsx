@@ -30,9 +30,20 @@ export function SquadRow({ asset, points, eventCount, stillToPlay, onClick }: Sq
           <PositionChip position={asset.position} />
           <span className="truncate text-xs text-muted-foreground">{asset.country}</span>
           {stillToPlay && (
-            <span className="hidden rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-bold text-sky-300 sm:inline">
-              Still to play
-            </span>
+            <>
+              <span
+                className="relative flex h-2 w-2 shrink-0 sm:hidden"
+                role="img"
+                aria-label="Still to play"
+                title="Still to play"
+              >
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-400" />
+              </span>
+              <span className="hidden rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-bold text-sky-300 sm:inline">
+                Still to play
+              </span>
+            </>
           )}
         </div>
       </div>

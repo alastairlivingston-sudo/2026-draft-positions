@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { RankBadge } from "@/components/leaderboard/rank-badge";
@@ -15,10 +18,40 @@ interface LeaderboardCardProps {
 export function LeaderboardCard({ row }: LeaderboardCardProps) {
   const { manager, rank, rankChange, total, change, bestAsset, remainingAssets, squadSize } = row;
 
+  // Briefly highlight the card when a live update changes this manager's
+  // total - but not for the initial render or the localStorage rehydration
+  // that follows it.
+  const prevTotal = useRef(total);
+  const readyRef = useRef(false);
+  const [flash, setFlash] = useState<"up" | "down" | null>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      readyRef.current = true;
+    }, 1500);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (prevTotal.current === total) return;
+    const wasReady = readyRef.current;
+    const direction = total > prevTotal.current ? "up" : "down";
+    prevTotal.current = total;
+    if (!wasReady) return;
+
+    setFlash(direction);
+    const timeout = setTimeout(() => setFlash(null), 1600);
+    return () => clearTimeout(timeout);
+  }, [total]);
+
   return (
     <Link
       href={`/league/world-cup-draft/manager/${manager.id}`}
-      className="group flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 transition-all hover:border-primary/40 hover:bg-card/80 active:scale-[0.99] sm:gap-4 sm:p-4"
+      className={cn(
+        "group flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 transition-all duration-700 hover:border-primary/40 hover:bg-card/80 active:scale-[0.99] sm:gap-4 sm:p-4",
+        flash === "up" && "border-primary/50 bg-primary/10",
+        flash === "down" && "border-destructive/50 bg-destructive/10",
+      )}
     >
       <RankBadge rank={rank} />
       <ManagerAvatar manager={manager} size="lg" className="hidden sm:flex" />

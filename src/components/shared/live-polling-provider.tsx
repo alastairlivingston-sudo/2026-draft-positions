@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 
+import { LiveStatusContext } from "@/lib/contexts/live-status-context";
 import { useLivePolling } from "@/lib/hooks/use-live-polling";
 
-/** Activates the 60s live-event poll for the whole league section. */
+/** Activates the live-data poll for the whole league section and exposes its status via context. */
 export function LivePollingProvider({ children }: { children: ReactNode }) {
-  useLivePolling();
-  return <>{children}</>;
+  const status = useLivePolling();
+  return <LiveStatusContext.Provider value={status}>{children}</LiveStatusContext.Provider>;
 }

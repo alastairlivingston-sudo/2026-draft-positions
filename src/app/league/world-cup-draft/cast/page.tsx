@@ -2,6 +2,7 @@
 
 import { RankBadge } from "@/components/leaderboard/rank-badge";
 import { EventIcon, EVENT_LABELS } from "@/components/shared/event-icon";
+import { LiveStatusIndicator } from "@/components/shared/live-status-indicator";
 import { ManagerAvatar } from "@/components/shared/manager-avatar";
 import { PointsPill } from "@/components/shared/points-pill";
 import { RankChange } from "@/components/shared/rank-change";
@@ -25,12 +26,15 @@ export default function CastPage() {
             <p className="text-sm text-muted-foreground sm:text-base">Live Leaderboard · Group Stage</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-xs font-bold text-destructive sm:text-sm">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
-          </span>
-          LIVE
+        <div className="flex items-center gap-3">
+          <LiveStatusIndicator className="text-sm [&_.live-status-label]:inline" />
+          <div className="flex items-center gap-1.5 text-xs font-bold text-destructive sm:text-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
+            </span>
+            LIVE
+          </div>
         </div>
       </header>
 

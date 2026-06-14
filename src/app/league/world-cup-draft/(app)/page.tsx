@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { LeaderboardCard } from "@/components/leaderboard/leaderboard-card";
 import { SummaryWidgets } from "@/components/leaderboard/summary-widgets";
 import { EventFeedItem } from "@/components/events/event-feed-item";
+import { EVENT_LABELS } from "@/components/shared/event-icon";
 import { ShareBar } from "@/components/shared/share-bar";
 import { useLeagueStore } from "@/lib/store/league-store";
 import { computeLeaderboard, getAssetById, getEventFeed, getManagerById } from "@/lib/selectors";
@@ -15,8 +16,21 @@ export default function LeaderboardPage() {
   const leaderboard = computeLeaderboard(data);
   const feed = getEventFeed(data).slice(0, 3);
 
+  const latest = feed[0];
+  const latestAsset = latest?.assetId ? getAssetById(data, latest.assetId) : undefined;
+  const latestManager = latest ? getManagerById(data, latest.managerId) : undefined;
+  const latestAnnouncement = latest
+    ? `${latestAsset?.name ?? "Update"}: ${EVENT_LABELS[latest.type]} for ${latestManager?.name ?? "a manager"}, ${
+        latest.points >= 0 ? "+" : ""
+      }${latest.points} points`
+    : "";
+
   return (
     <div className="flex flex-col gap-5">
+      <div aria-live="polite" className="sr-only">
+        {latestAnnouncement}
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">League Leaderboard</h1>
