@@ -128,12 +128,18 @@ export function buildEventHash(params: {
  * at least CLEAN_SHEET_MIN_MINUTES without their team conceding while
  * they were on it. This function awards the auto/default case - the
  * team conceded nothing in the whole match, so every qualifying
- * GK/Defender gets it. If a player was substituted before the team's
- * only goal conceded (or came off before 60 minutes), an admin should
- * add/remove the individual `clean_sheet` event from the Events tab to
- * apply the rule for that specific case.
+ * GK/Defender gets it, except those listed in `nonPlayingAssetIds`
+ * (squad players who didn't appear in the match at all, per provider
+ * roster data - see EspnProvider.getNonAppearingAssetIds). If a player
+ * appeared but came off before 60 minutes, an admin should remove the
+ * individual `clean_sheet` event from the Events tab to apply the rule
+ * for that specific case.
  */
-export function computeMatchResultEvents(match: Match, squadAssets: SquadAsset[]): RawApiEvent[] {
+export function computeMatchResultEvents(
+  match: Match,
+  squadAssets: SquadAsset[],
+  nonPlayingAssetIds?: Set<string>,
+): RawApiEvent[] {
   if (match.homeScore === null || match.awayScore === null) return [];
 
   const sides = [
@@ -156,7 +162,11 @@ export function computeMatchResultEvents(match: Match, squadAssets: SquadAsset[]
         if (side.conceded >= 3) {
           events.push({ fixtureId: match.id, assetId: asset.id, type: "team_conceded_3plus", minute: 90, detail: `${side.team} concede ${side.conceded}` });
         }
-      } else if (side.conceded === 0 && CLEAN_SHEET_POSITIONS.includes(asset.position)) {
+      } else if (
+        side.conceded === 0 &&
+        CLEAN_SHEET_POSITIONS.includes(asset.position) &&
+        !nonPlayingAssetIds?.has(asset.id)
+      ) {
         events.push({ fixtureId: match.id, assetId: asset.id, type: "clean_sheet", minute: 90, detail: `${side.team} keep a clean sheet` });
       }
     }

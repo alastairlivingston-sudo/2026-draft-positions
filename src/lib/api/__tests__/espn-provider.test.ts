@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { discoverDynamicMatches, resolveSquadCountry, type EspnEvent } from "@/lib/api/espn-provider";
+import {
+  discoverDynamicMatches,
+  findNonAppearingCleanSheetAssetIds,
+  resolveSquadCountry,
+  type EspnEvent,
+  type EspnSummaryResponse,
+} from "@/lib/api/espn-provider";
 import { ESPN_FIXTURE_ID_MAP } from "@/lib/data/espn-fixture-map";
+import { SEED_MATCHES } from "@/lib/data/seed";
+import type { Match } from "@/lib/types";
 
 function makeEvent(overrides: Partial<EspnEvent> & { id: string }): EspnEvent {
   return {
@@ -139,5 +147,75 @@ describe("discoverDynamicMatches", () => {
 
     const [match] = discoverDynamicMatches([event]);
     expect(match.stage).toBe("Knockout Stage");
+  });
+});
+
+describe("findNonAppearingCleanSheetAssetIds", () => {
+  // m13: Spain vs Cape Verde - Spain's only squad GK/Defender is Pedro Porro (sac-4).
+  const m13 = SEED_MATCHES.find((m) => m.id === "m13")!;
+  const completedDraw: Match = { ...m13, status: "completed", homeScore: 0, awayScore: 0, minute: 90 };
+
+  function summaryWithSpainRoster(roster: EspnSummaryResponse["rosters"]): EspnSummaryResponse {
+    return { rosters: roster };
+  }
+
+  it("excludes a squad GK/Defender who never started or came on as a sub", () => {
+    const json = summaryWithSpainRoster([
+      {
+        homeAway: "home",
+        roster: [
+          { starter: true, subbedIn: false, athlete: { displayName: "Unai Simon" } },
+          { starter: false, subbedIn: false, athlete: { displayName: "Pedro Porro" } },
+        ],
+      },
+    ]);
+
+    expect(findNonAppearingCleanSheetAssetIds(json, completedDraw)).toEqual(["sac-4"]);
+  });
+
+  it("does not exclude a squad GK/Defender who started", () => {
+    const json = summaryWithSpainRoster([
+      {
+        homeAway: "home",
+        roster: [{ starter: true, subbedIn: false, athlete: { displayName: "Pedro Porro" } }],
+      },
+    ]);
+
+    expect(findNonAppearingCleanSheetAssetIds(json, completedDraw)).toEqual([]);
+  });
+
+  it("does not exclude a squad GK/Defender who came on as a substitute", () => {
+    const json = summaryWithSpainRoster([
+      {
+        homeAway: "home",
+        roster: [{ starter: false, subbedIn: true, athlete: { displayName: "Pedro Porro" } }],
+      },
+    ]);
+
+    expect(findNonAppearingCleanSheetAssetIds(json, completedDraw)).toEqual([]);
+  });
+
+  it("returns nothing for a match with no result yet", () => {
+    const upcoming: Match = { ...m13, status: "upcoming", homeScore: null, awayScore: null, minute: null };
+    const json = summaryWithSpainRoster([
+      {
+        homeAway: "home",
+        roster: [{ starter: false, subbedIn: false, athlete: { displayName: "Pedro Porro" } }],
+      },
+    ]);
+
+    expect(findNonAppearingCleanSheetAssetIds(json, upcoming)).toEqual([]);
+  });
+
+  it("returns nothing when the side conceded a goal", () => {
+    const homeConceded: Match = { ...m13, status: "completed", homeScore: 0, awayScore: 1, minute: 90 };
+    const json = summaryWithSpainRoster([
+      {
+        homeAway: "home",
+        roster: [{ starter: false, subbedIn: false, athlete: { displayName: "Pedro Porro" } }],
+      },
+    ]);
+
+    expect(findNonAppearingCleanSheetAssetIds(json, homeConceded)).toEqual([]);
   });
 });

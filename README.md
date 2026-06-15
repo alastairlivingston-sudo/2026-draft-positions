@@ -139,10 +139,20 @@ On each response:
    first time a match flips to `completed`, `computeMatchResultEvents`
    (`src/lib/scoring.ts`) derives its clean-sheet and team
    win/loss/3+ bonus events from the final score - no ID mapping
-   needed for these.
+   needed for these. Clean sheets are skipped for squad GK/Defenders
+   who never appeared in the match at all, per
+   `nonAppearingAssetIds` (see below).
 2. `events` - new player events (goals, assists, cards, own goals,
    missed penalties) for any live match, ingested via
    `ingestApiEvents`, which dedupes on `fixtureId:assetId:minute:type:detail`.
+3. `nonAppearingAssetIds` - for completed matches where a side kept a
+   clean sheet, `EspnProvider.getNonAppearingAssetIds`
+   (`src/lib/api/espn-provider.ts`) checks that side's ESPN roster and
+   lists squad GK/Defender asset ids who were neither a starter nor
+   subbed on, so `computeMatchResultEvents` doesn't award them a clean
+   sheet. Players who appeared but came off before 60 minutes aren't
+   covered by this check - an admin can remove their individual
+   `clean_sheet` event from the Events tab if needed.
 
 - **Mock mode (default)**: `src/lib/api/mock-provider.ts` reveals a
   scripted set of events for the live match (`m13`, Spain vs Cape

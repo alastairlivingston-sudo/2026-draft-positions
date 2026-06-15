@@ -140,4 +140,14 @@ describe("computeMatchResultEvents", () => {
     const events = computeMatchResultEvents(draw, squadAssets);
     expect(events.some((e) => e.type === "team_win" || e.type === "team_loss")).toBe(false);
   });
+
+  it("does not award a clean sheet to a GK/Defender listed in nonPlayingAssetIds", () => {
+    const events = computeMatchResultEvents(baseMatch, squadAssets, new Set([franceDefender.id]));
+    expect(events.some((e) => e.assetId === franceDefender.id)).toBe(false);
+  });
+
+  it("still awards a clean sheet to GK/Defenders not in nonPlayingAssetIds", () => {
+    const events = computeMatchResultEvents(baseMatch, squadAssets, new Set(["some-other-asset"]));
+    expect(events.filter((e) => e.assetId === franceDefender.id).map((e) => e.type)).toEqual(["clean_sheet"]);
+  });
 });
