@@ -73,6 +73,19 @@ export interface LeagueStore extends LeagueData {
 
   toggleMatchLock: (matchId: string, actor?: string) => void;
 
+  /**
+   * Manually corrects a match's status/score/minute - for fixtures the
+   * live provider doesn't cover yet (or got wrong). If this transitions
+   * the match to "completed" for the first time, also computes and
+   * ingests its result-based events (clean sheets, team win/loss/3+
+   * bonuses), exactly like syncMatches does for live data.
+   */
+  updateMatchResult: (
+    matchId: string,
+    patch: Partial<Pick<Match, "status" | "homeScore" | "awayScore" | "minute">>,
+    actor?: string,
+  ) => void;
+
   /** Edits a squad asset's mapping (name, country, position, asset type) from the Mapping tab. */
   updateSquadAsset: (
     id: string,
@@ -80,7 +93,7 @@ export interface LeagueStore extends LeagueData {
     actor?: string,
   ) => void;
 
-  ingestApiEvents: (events: RawApiEvent[], source: "api" | "mock", actor?: string) => number;
+  ingestApiEvents: (events: RawApiEvent[], source: "api" | "mock" | "manual", actor?: string) => number;
 
   /**
    * Merges fresh status/score/minute for tracked matches from a live
@@ -358,6 +371,35 @@ export const useLeagueStore = create<LeagueStore>()(
         });
       },
 
+      updateMatchResult: (matchId, patch, actor = DEFAULT_ADMIN_ACTOR) => {
+        const state = get();
+        const match = state.matches.find((m) => m.id === matchId);
+        if (!match) return;
+
+        const updated: Match = { ...match, ...patch };
+        const describeResult = (m: Match) =>
+          `${m.status}${m.homeScore !== null && m.awayScore !== null ? ` ${m.homeScore}-${m.awayScore}` : ""}`;
+
+        const auditLog = pushAudit(state.auditLog, {
+          action: "update_match" as AuditAction,
+          actor,
+          assetName: `${match.homeTeam} vs ${match.awayTeam}`,
+          oldValue: describeResult(match),
+          newValue: describeResult(updated),
+          reason: "Match result corrected manually by admin",
+        });
+
+        set({
+          matches: state.matches.map((m) => (m.id === matchId ? updated : m)),
+          auditLog,
+        });
+
+        if (match.status !== "completed" && updated.status === "completed") {
+          const resultEvents = computeMatchResultEvents(updated, state.squadAssets);
+          if (resultEvents.length > 0) get().ingestApiEvents(resultEvents, "manual");
+        }
+      },
+
       updateSquadAsset: (id, patch, actor = DEFAULT_ADMIN_ACTOR) => {
         const state = get();
         const existing = state.squadAssets.find((a) => a.id === id);
@@ -433,6 +475,7 @@ export const useLeagueStore = create<LeagueStore>()(
       syncMatches: (apiMatches) => {
         const state = get();
         const apiById = new Map(apiMatches.map((m) => [m.id, m]));
+        const existingIds = new Set(state.matches.map((m) => m.id));
         let resultEvents: RawApiEvent[] = [];
 
         const matches = state.matches.map((match) => {
@@ -455,7 +498,17 @@ export const useLeagueStore = create<LeagueStore>()(
           return updated;
         });
 
-        set({ matches });
+        // Newly-discovered fixtures (e.g. knockout matches the provider finds
+        // dynamically) aren't in state.matches yet - append them so they show
+        // up in the UI and get synced like any other match from now on.
+        const newMatches = apiMatches.filter((m) => !existingIds.has(m.id));
+        for (const match of newMatches) {
+          if (match.status === "completed") {
+            resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets)];
+          }
+        }
+
+        set({ matches: [...matches, ...newMatches] });
         if (resultEvents.length > 0) {
           get().ingestApiEvents(resultEvents, "api");
         }
@@ -464,7 +517,7 @@ export const useLeagueStore = create<LeagueStore>()(
       resetToSeed: () => set({ ...initialState }),
     }),
     {
-      name: "wc-fantasy-league-v4",
+      name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
     },
   ),

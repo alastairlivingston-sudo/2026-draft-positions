@@ -118,7 +118,8 @@ export type AuditAction =
   | "recalculate_points"
   | "lock_match"
   | "unlock_match"
-  | "update_squad_asset";
+  | "update_squad_asset"
+  | "update_match";
 
 export interface AuditLogEntry {
   id: string;

@@ -1,3 +1,4 @@
+import { countryCode } from "@/lib/countries";
 import { ESPN_FIXTURE_ID_MAP, ESPN_SCOREBOARD_DATE_RANGE } from "@/lib/data/espn-fixture-map";
 import { SEED_MATCHES, SEED_SQUAD_ASSETS } from "@/lib/data/seed";
 import type { FantasyEventType, Match, MatchStatus, RawApiEvent, SquadAsset } from "@/lib/types";
@@ -12,16 +13,22 @@ const STATE_MAP: Record<string, MatchStatus> = {
   post: "completed",
 };
 
-interface EspnCompetitor {
+export interface EspnCompetitor {
   homeAway: "home" | "away";
   score?: string;
+  team?: { displayName: string };
 }
 
-interface EspnEvent {
+export interface EspnEvent {
   id: string;
+  /** ISO date-time, e.g. "2026-06-29T17:00Z". */
+  date: string;
+  /** e.g. { slug: "round-of-32" } - used to label dynamically-discovered knockout fixtures. */
+  season?: { slug?: string };
   competitions: {
     status: { clock: number; type: { state: string } };
     competitors: EspnCompetitor[];
+    venue?: { fullName?: string };
   }[];
 }
 
@@ -74,6 +81,123 @@ function parseMinute(displayValue: string): number {
   return match ? Number(match[1]) : 0;
 }
 
+/** Lowercases and strips diacritics/punctuation for country-name matching,
+ *  e.g. ESPN's "Curaçao" -> "curacao" to match our "Curacao". Unlike
+ *  normalizeName() above, word order is preserved - country names are always
+ *  in a fixed order. */
+function normalizeCountryName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[^a-z\s]/g, "")
+    .trim();
+}
+
+const SQUAD_COUNTRY_NAMES = new Set(SEED_SQUAD_ASSETS.map((asset) => asset.country));
+
+const NORMALIZED_SQUAD_COUNTRIES = new Map(
+  [...SQUAD_COUNTRY_NAMES].map((country) => [normalizeCountryName(country), country]),
+);
+
+/** ESPN scoreboard team names that don't normalize to a match against our
+ *  squad country names (e.g. ESPN's "South Korea"/"United States"/"Turkey"
+ *  vs our "Korea"/"USA"/"Türkiye"), keyed by normalizeCountryName(). */
+const ESPN_COUNTRY_NAME_ALIASES: Record<string, string> = {
+  "south korea": "Korea",
+  "korea republic": "Korea",
+  "united states": "USA",
+  turkey: "Türkiye",
+};
+
+/** Resolves an ESPN team display name to the exact country string used by
+ *  SquadAsset.country / Match.homeTeam/awayTeam, so dynamically-discovered
+ *  fixtures plug straight into computeMatchResultEvents's exact-string
+ *  matching. Returns undefined for teams with no squad relevance (e.g.
+ *  knockout-bracket placeholders like "Group C Winner", or countries not
+ *  picked by any manager). */
+export function resolveSquadCountry(espnDisplayName: string | undefined): string | undefined {
+  if (!espnDisplayName) return undefined;
+  const normalized = normalizeCountryName(espnDisplayName);
+  return ESPN_COUNTRY_NAME_ALIASES[normalized] ?? NORMALIZED_SQUAD_COUNTRIES.get(normalized);
+}
+
+/** ESPN's season.slug values for knockout rounds, mapped to display labels. */
+const STAGE_LABELS: Record<string, string> = {
+  "round-of-32": "Round of 32",
+  "round-of-16": "Round of 16",
+  quarterfinal: "Quarter-final",
+  semifinal: "Semi-final",
+  "third-place": "Third-place playoff",
+  final: "Final",
+};
+
+function stageLabel(slug: string | undefined): string {
+  if (!slug) return "Knockout Stage";
+  return STAGE_LABELS[slug] ?? slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** ESPN numeric event ids already covered by ESPN_FIXTURE_ID_MAP, so
+ *  discoverDynamicMatches never re-adds a statically-mapped fixture. */
+const KNOWN_ESPN_IDS = new Set(Object.values(ESPN_FIXTURE_ID_MAP));
+
+/**
+ * Scans ESPN scoreboard events not already covered by ESPN_FIXTURE_ID_MAP
+ * (i.e. knockout-round fixtures, whose matchups aren't known until the group
+ * stage concludes) for any that involve a country picked by a squad, and
+ * synthesizes Match objects for them. Purely additive - never touches the
+ * statically-mapped, already-validated SEED_MATCHES entries.
+ */
+export function discoverDynamicMatches(events: EspnEvent[]): Match[] {
+  const discovered: Match[] = [];
+
+  for (const event of events) {
+    const espnId = Number(event.id);
+    if (KNOWN_ESPN_IDS.has(espnId)) continue;
+
+    const comp = event.competitions[0];
+    const home = comp.competitors.find((c) => c.homeAway === "home");
+    const away = comp.competitors.find((c) => c.homeAway === "away");
+    if (!home || !away) continue;
+
+    const homeCountry = resolveSquadCountry(home.team?.displayName);
+    const awayCountry = resolveSquadCountry(away.team?.displayName);
+    if (!homeCountry && !awayCountry) continue;
+
+    const homeTeam = homeCountry ?? home.team?.displayName ?? "TBD";
+    const awayTeam = awayCountry ?? away.team?.displayName ?? "TBD";
+    const status = STATE_MAP[comp.status.type.state] ?? "upcoming";
+    const isUpcoming = status === "upcoming";
+
+    discovered.push({
+      id: `espn-${espnId}`,
+      stage: stageLabel(event.season?.slug),
+      homeTeam,
+      homeCountryCode: countryCode(homeTeam),
+      awayTeam,
+      awayCountryCode: countryCode(awayTeam),
+      kickoff: event.date,
+      status,
+      homeScore: isUpcoming ? null : Number(home.score ?? 0),
+      awayScore: isUpcoming ? null : Number(away.score ?? 0),
+      minute: isUpcoming ? null : Math.floor(comp.status.clock / 60),
+      venue: comp.venue?.fullName ?? "",
+      locked: false,
+    });
+  }
+
+  return discovered;
+}
+
+/** Resolves a Match id to its ESPN numeric event id, for both
+ *  statically-mapped fixtures (ESPN_FIXTURE_ID_MAP) and
+ *  dynamically-discovered ones (id format "espn-<espnId>", see
+ *  discoverDynamicMatches). */
+function resolveEspnId(matchId: string): number | undefined {
+  if (ESPN_FIXTURE_ID_MAP[matchId] !== undefined) return ESPN_FIXTURE_ID_MAP[matchId];
+  const dynamicId = matchId.match(/^espn-(\d+)$/);
+  return dynamicId ? Number(dynamicId[1]) : undefined;
+}
+
 /** ESPN goal event subtypes confirmed in live World Cup data - "goal" for
  *  standard goals, plus headers/volleys/penalties which use distinct type
  *  strings. Kept as an explicit allowlist (rather than a "goal---" prefix
@@ -120,9 +244,12 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
  * required, unlike API-Football (whose free tier doesn't cover the 2026
  * season at all).
  *
- * Fixture identities are resolved via src/lib/data/espn-fixture-map.ts,
- * which maps SEED_MATCHES ids to ESPN's numeric event ids for World Cup
- * 2026 Group Stage · Matchday 1.
+ * Fixture identities for the group stage are resolved via
+ * src/lib/data/espn-fixture-map.ts, which maps SEED_MATCHES ids to ESPN's
+ * numeric event ids for World Cup 2026 Group Stage · Matchday 1-3
+ * (m1-m66). Knockout-round fixtures (Round of 32 onward) aren't pre-mapped
+ * - discoverDynamicMatches() finds them automatically once ESPN's bracket
+ * is populated, for any fixture involving a country picked by a squad.
  *
  * Coverage notes:
  * - Goals, assists, yellow/red cards and own goals are derived from each
@@ -136,7 +263,7 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
  */
 export class EspnProvider implements ApiProvider {
   async getMatches(): Promise<Match[]> {
-    const res = await fetch(`${BASE_URL}/scoreboard?dates=${ESPN_SCOREBOARD_DATE_RANGE}&limit=100`, {
+    const res = await fetch(`${BASE_URL}/scoreboard?dates=${ESPN_SCOREBOARD_DATE_RANGE}&limit=150`, {
       cache: "no-store",
     });
     if (!res.ok) return SEED_MATCHES;
@@ -144,7 +271,7 @@ export class EspnProvider implements ApiProvider {
     const json = (await res.json()) as EspnScoreboardResponse;
     const byEspnId = new Map(json.events.map((event) => [Number(event.id), event]));
 
-    return SEED_MATCHES.map((seedMatch) => {
+    const mapped = SEED_MATCHES.map((seedMatch) => {
       const espnId = ESPN_FIXTURE_ID_MAP[seedMatch.id];
       const event = espnId !== undefined ? byEspnId.get(espnId) : undefined;
       if (!event) return seedMatch;
@@ -163,15 +290,17 @@ export class EspnProvider implements ApiProvider {
         minute: isUpcoming ? null : Math.floor(comp.status.clock / 60),
       };
     });
+
+    return [...mapped, ...discoverDynamicMatches(json.events)];
   }
 
   async getLiveEvents(matches: Match[]): Promise<RawApiEvent[]> {
-    const liveMatches = matches.filter((m) => m.status === "live" && ESPN_FIXTURE_ID_MAP[m.id] !== undefined);
+    const liveMatches = matches.filter((m) => m.status === "live" && resolveEspnId(m.id) !== undefined);
     if (liveMatches.length === 0) return [];
 
     const perMatch = await Promise.all(
       liveMatches.map(async (match) => {
-        const espnId = ESPN_FIXTURE_ID_MAP[match.id];
+        const espnId = resolveEspnId(match.id);
         const res = await fetch(`${BASE_URL}/summary?event=${espnId}`, { cache: "no-store" });
         if (!res.ok) return [];
 
