@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { countryCode } from "@/lib/countries";
 import {
   SEED_AUDIT_LOG,
   SEED_FANTASY_EVENTS,
@@ -20,6 +21,7 @@ import type {
   ManualAdjustment,
   RawApiEvent,
   ScoringValues,
+  SquadAsset,
 } from "@/lib/types";
 
 export const DEFAULT_ADMIN_ACTOR = "admin";
@@ -64,11 +66,19 @@ export interface LeagueStore extends LeagueData {
   deleteFantasyEvent: (id: string, reason: string, actor?: string) => void;
 
   addManualAdjustment: (input: AddAdjustmentInput, actor?: string) => void;
+  deleteManualAdjustment: (id: string, reason: string, actor?: string) => void;
 
   updateScoringValues: (values: ScoringValues, mode: "forward" | "recalculate", actor?: string) => void;
   recalculateAllPoints: (actor?: string) => void;
 
   toggleMatchLock: (matchId: string, actor?: string) => void;
+
+  /** Edits a squad asset's mapping (name, country, position, asset type) from the Mapping tab. */
+  updateSquadAsset: (
+    id: string,
+    patch: Partial<Pick<SquadAsset, "name" | "country" | "position" | "assetType">>,
+    actor?: string,
+  ) => void;
 
   ingestApiEvents: (events: RawApiEvent[], source: "api" | "mock", actor?: string) => number;
 
@@ -248,6 +258,32 @@ export const useLeagueStore = create<LeagueStore>()(
         set({ manualAdjustments: nextState.manualAdjustments, auditLog });
       },
 
+      deleteManualAdjustment: (id, reason, actor = DEFAULT_ADMIN_ACTOR) => {
+        const state = get();
+        const existing = state.manualAdjustments.find((a) => a.id === id);
+        if (!existing) return;
+
+        const manager = state.managers.find((m) => m.id === existing.managerId);
+        const asset = existing.assetId ? state.squadAssets.find((a) => a.id === existing.assetId) : undefined;
+
+        const auditLog = pushAudit(state.auditLog, {
+          action: "delete_adjustment" as AuditAction,
+          actor,
+          managerId: existing.managerId,
+          managerName: manager?.name,
+          assetId: asset?.id,
+          assetName: asset?.name,
+          oldValue: `${existing.points >= 0 ? "+" : ""}${existing.points} pts (${existing.reason})`,
+          newValue: "deleted",
+          reason,
+        });
+
+        set({
+          manualAdjustments: state.manualAdjustments.filter((a) => a.id !== id),
+          auditLog,
+        });
+      },
+
       updateScoringValues: (values, mode, actor = DEFAULT_ADMIN_ACTOR) => {
         const state = get();
         const oldValue = JSON.stringify(state.scoringValues);
@@ -318,6 +354,38 @@ export const useLeagueStore = create<LeagueStore>()(
 
         set({
           matches: state.matches.map((m) => (m.id === matchId ? { ...m, locked: nextLocked } : m)),
+          auditLog,
+        });
+      },
+
+      updateSquadAsset: (id, patch, actor = DEFAULT_ADMIN_ACTOR) => {
+        const state = get();
+        const existing = state.squadAssets.find((a) => a.id === id);
+        if (!existing) return;
+
+        const updated: SquadAsset = {
+          ...existing,
+          ...patch,
+          countryCode: patch.country ? countryCode(patch.country) : existing.countryCode,
+        };
+
+        const manager = state.managers.find((m) => m.id === existing.managerId);
+        const describeAsset = (a: SquadAsset) => `${a.name} (${a.country}, ${a.position}, ${a.assetType})`;
+
+        const auditLog = pushAudit(state.auditLog, {
+          action: "update_squad_asset" as AuditAction,
+          actor,
+          managerId: existing.managerId,
+          managerName: manager?.name,
+          assetId: existing.id,
+          assetName: updated.name,
+          oldValue: describeAsset(existing),
+          newValue: describeAsset(updated),
+          reason: "Squad mapping corrected by admin",
+        });
+
+        set({
+          squadAssets: state.squadAssets.map((a) => (a.id === id ? updated : a)),
           auditLog,
         });
       },
@@ -396,7 +464,7 @@ export const useLeagueStore = create<LeagueStore>()(
       resetToSeed: () => set({ ...initialState }),
     }),
     {
-      name: "wc-fantasy-league-v3",
+      name: "wc-fantasy-league-v4",
       storage: createJSONStorage(() => localStorage),
     },
   ),

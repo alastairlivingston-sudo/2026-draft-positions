@@ -2,16 +2,25 @@
 
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Plus, Settings2 } from "lucide-react";
+import { Plus, Settings2, Trash2 } from "lucide-react";
 
 import { PointsPill } from "@/components/shared/points-pill";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getManagerAssets } from "@/lib/selectors";
 import { useLeagueStore } from "@/lib/store/league-store";
+import type { ManualAdjustment } from "@/lib/types";
 
 const MANAGER_TOTAL = "manager-total";
 
@@ -110,30 +119,69 @@ export function AdminAdjustmentsTab() {
         {adjustments.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No manual adjustments yet.</p>
         ) : (
-          adjustments.map((adj) => {
-            const manager = data.managers.find((m) => m.id === adj.managerId);
-            const asset = adj.assetId ? data.squadAssets.find((a) => a.id === adj.assetId) : undefined;
-            return (
-              <div key={adj.id} className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card p-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
-                  <Settings2 className="h-4 w-4" />
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-bold">{asset ? asset.name : `${manager?.name} (total)`}</span>
-                    <PointsPill points={adj.points} size="sm" />
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">{adj.reason}</p>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground/70">
-                    <span>{manager?.name}</span>
-                    <span>{formatDistanceToNow(new Date(adj.createdAt), { addSuffix: true })}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })
+          adjustments.map((adj) => <AdjustmentRow key={adj.id} adjustment={adj} />)
         )}
       </div>
+    </div>
+  );
+}
+
+function AdjustmentRow({ adjustment }: { adjustment: ManualAdjustment }) {
+  const data = useLeagueStore((s) => s);
+  const deleteManualAdjustment = useLeagueStore((s) => s.deleteManualAdjustment);
+
+  const manager = data.managers.find((m) => m.id === adjustment.managerId);
+  const asset = adjustment.assetId ? data.squadAssets.find((a) => a.id === adjustment.assetId) : undefined;
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+
+  function handleDeleteSubmit() {
+    if (!deleteReason.trim()) return;
+    deleteManualAdjustment(adjustment.id, deleteReason);
+    setDeleteOpen(false);
+  }
+
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card p-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+        <Settings2 className="h-4 w-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-bold">{asset ? asset.name : `${manager?.name} (total)`}</span>
+          <PointsPill points={adjustment.points} size="sm" />
+        </div>
+        <p className="truncate text-xs text-muted-foreground">{adjustment.reason}</p>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground/70">
+          <span>{manager?.name}</span>
+          <span>{formatDistanceToNow(new Date(adjustment.createdAt), { addSuffix: true })}</span>
+        </div>
+      </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Delete adjustment" />}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete adjustment</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will remove the {adjustment.points >= 0 ? "+" : ""}
+            {adjustment.points} pt adjustment for {asset ? asset.name : `${manager?.name}'s total`}.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Label>Reason for deletion</Label>
+            <Textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="Required for the audit log" />
+          </div>
+          <DialogFooter>
+            <Button variant="destructive" onClick={handleDeleteSubmit} disabled={!deleteReason.trim()}>
+              Delete adjustment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

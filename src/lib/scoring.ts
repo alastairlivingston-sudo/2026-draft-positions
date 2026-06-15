@@ -40,6 +40,13 @@ export const LOGGABLE_EVENT_TYPES: FantasyEventType[] = [...PLAYER_ONLY_EVENTS, 
 export const CLEAN_SHEET_POSITIONS: Position[] = ["Goalkeeper", "Defender"];
 
 /**
+ * Minimum minutes a player must be on the pitch to qualify for clean
+ * sheet points - matches the standard fantasy-football "60 minutes"
+ * appearance threshold.
+ */
+export const CLEAN_SHEET_MIN_MINUTES = 60;
+
+/**
  * Whether a given event type can ever apply to this asset.
  * Team bonuses only apply to asset_type "team"; player events only
  * apply to asset_type "player". manual_adjustment is always eligible.
@@ -116,6 +123,15 @@ export function buildEventHash(params: {
  * played in a completed match. Used to auto-score those bonuses once a
  * live provider reports a final score, without needing any per-asset
  * API ID mapping (matched purely on `SquadAsset.country`).
+ *
+ * Clean sheet points require the player to have been on the pitch for
+ * at least CLEAN_SHEET_MIN_MINUTES without their team conceding while
+ * they were on it. This function awards the auto/default case - the
+ * team conceded nothing in the whole match, so every qualifying
+ * GK/Defender gets it. If a player was substituted before the team's
+ * only goal conceded (or came off before 60 minutes), an admin should
+ * add/remove the individual `clean_sheet` event from the Events tab to
+ * apply the rule for that specific case.
  */
 export function computeMatchResultEvents(match: Match, squadAssets: SquadAsset[]): RawApiEvent[] {
   if (match.homeScore === null || match.awayScore === null) return [];
@@ -153,7 +169,7 @@ export const SCORING_LABELS: Record<keyof ScoringValues, { label: string; descri
   assist: { label: "Assist", description: "Player assists a goal", appliesTo: "Players" },
   cleanSheetDefenderGk: {
     label: "Clean sheet",
-    description: "Team doesn't concede (goalkeeper or defender only)",
+    description: "Team doesn't concede while the player is on the pitch (goalkeeper or defender, 60+ mins played)",
     appliesTo: "GK / Defenders",
   },
   yellowCard: { label: "Yellow card", description: "Player is booked", appliesTo: "Players" },

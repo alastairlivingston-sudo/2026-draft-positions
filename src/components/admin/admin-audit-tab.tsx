@@ -10,10 +10,12 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   update_event: "Event updated",
   delete_event: "Event deleted",
   manual_adjustment: "Manual adjustment",
+  delete_adjustment: "Adjustment deleted",
   update_scoring_rules: "Scoring rules updated",
   recalculate_points: "Points recalculated",
   lock_match: "Match locked",
   unlock_match: "Match unlocked",
+  update_squad_asset: "Squad mapping updated",
 };
 
 export function AdminAuditTab() {

@@ -18,11 +18,13 @@ export interface MatchAssetRow {
 interface MatchCardProps {
   match: Match;
   assets: MatchAssetRow[];
-  isAdmin: boolean;
   onToggleLock?: () => void;
 }
 
-export function MatchCard({ match, assets, isAdmin, onToggleLock }: MatchCardProps) {
+export function MatchCard({ match, assets, onToggleLock }: MatchCardProps) {
+  const playerAssets = assets.filter((row) => row.asset.assetType !== "team");
+  const teamAssets = assets.filter((row) => row.asset.assetType === "team");
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4">
       <div className="flex items-center justify-between">
@@ -55,12 +57,12 @@ export function MatchCard({ match, assets, isAdmin, onToggleLock }: MatchCardPro
         <span className="truncate">{match.venue}</span>
       </div>
 
-      {assets.length > 0 && (
+      {playerAssets.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-border/60 pt-3">
           <span className="pb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            Fantasy squad assets
+            Assets playing in this match
           </span>
-          {assets.map(({ asset, manager, points }) => (
+          {playerAssets.map(({ asset, manager, points }) => (
             <Link
               key={asset.id}
               href={`/league/world-cup-draft/manager/${manager.id}`}
@@ -77,24 +79,43 @@ export function MatchCard({ match, assets, isAdmin, onToggleLock }: MatchCardPro
         </div>
       )}
 
-      {isAdmin && (
-        <div className="flex items-center justify-between border-t border-border/60 pt-3">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {match.locked ? (
-              <>
-                <Lock className="h-3.5 w-3.5" /> Locked · events reviewed
-              </>
-            ) : (
-              <>
-                <LockOpen className="h-3.5 w-3.5" /> Unlocked · awaiting review
-              </>
-            )}
-          </span>
-          <Button size="sm" variant={match.locked ? "outline" : "default"} onClick={onToggleLock}>
-            {match.locked ? "Unlock" : "Lock"}
-          </Button>
+      {teamAssets.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
+          {teamAssets.map(({ asset, manager, points }) => (
+            <div key={asset.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <PositionChip position={asset.position} />
+                  <span className="truncate text-sm font-semibold">{asset.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">{manager.name}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Whole-team pick — scores from {asset.country}&apos;s result in this match, not individual player
+                  performances.
+                </p>
+              </div>
+              <PointsPill points={points} size="sm" />
+            </div>
+          ))}
         </div>
       )}
+
+      <div className="flex items-center justify-between border-t border-border/60 pt-3">
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {match.locked ? (
+            <>
+              <Lock className="h-3.5 w-3.5" /> Locked · events reviewed
+            </>
+          ) : (
+            <>
+              <LockOpen className="h-3.5 w-3.5" /> Unlocked · awaiting review
+            </>
+          )}
+        </span>
+        <Button size="sm" variant={match.locked ? "outline" : "default"} onClick={onToggleLock}>
+          {match.locked ? "Unlock" : "Lock"}
+        </Button>
+      </div>
     </div>
   );
 }

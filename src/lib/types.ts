@@ -113,10 +113,12 @@ export type AuditAction =
   | "update_event"
   | "delete_event"
   | "manual_adjustment"
+  | "delete_adjustment"
   | "update_scoring_rules"
   | "recalculate_points"
   | "lock_match"
-  | "unlock_match";
+  | "unlock_match"
+  | "update_squad_asset";
 
 export interface AuditLogEntry {
   id: string;

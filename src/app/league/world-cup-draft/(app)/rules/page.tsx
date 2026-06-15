@@ -40,7 +40,10 @@ export default function RulesPage() {
           <li>Player rows score from individual match events: goals, assists, cards, clean sheets and more.</li>
           <li>Team rows score from their nation&apos;s match results - wins, losses and high-scoring games.</li>
           <li>Team bonuses never apply to player rows, and player events never apply to team rows.</li>
-          <li>Clean sheet points only apply to goalkeepers and defenders.</li>
+          <li>
+            Clean sheet points only apply to goalkeepers and defenders, and only if they played 60+ minutes
+            without their team conceding while they were on the pitch.
+          </li>
         </ul>
       </section>
 
