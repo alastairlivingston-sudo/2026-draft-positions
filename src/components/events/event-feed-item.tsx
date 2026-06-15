@@ -15,7 +15,7 @@ interface EventFeedItemProps {
 }
 
 export function EventFeedItem({ entry, manager, asset, matchLabel, linkToManager = true }: EventFeedItemProps) {
-  const title = asset?.name ?? "Unknown asset";
+  const title = asset?.name ?? manager?.name ?? "Manual adjustment";
   const label = EVENT_LABELS[entry.type] ?? entry.type;
 
   const content = (

@@ -47,6 +47,7 @@ export default function ManagerSquadPage() {
 
   const selectedAsset = selectedAssetId ? assets.find((a) => a.id === selectedAssetId) ?? null : null;
   const selectedFeed = selectedAssetId ? feed.filter((entry) => entry.assetId === selectedAssetId) : [];
+  const managerAdjustments = feed.filter((entry) => entry.managerId === manager.id && entry.assetId === null);
 
   return (
     <div className="flex flex-col gap-5">
@@ -101,6 +102,17 @@ export default function ManagerSquadPage() {
           })}
         </div>
       </section>
+
+      {managerAdjustments.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Adjustments</h2>
+          <div className="grid gap-2">
+            {managerAdjustments.map((entry) => (
+              <EventFeedItem key={entry.id} entry={entry} manager={manager} linkToManager={false} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <Sheet open={!!selectedAssetId} onOpenChange={(open) => !open && setSelectedAssetId(null)}>
         <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto rounded-t-3xl">

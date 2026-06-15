@@ -83,7 +83,7 @@ export default function CastPage() {
                 <div key={entry.id} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-3">
                   <EventIcon type={entry.type} />
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-bold sm:text-base">{asset?.name ?? "Unknown asset"}</span>
+                    <span className="truncate text-sm font-bold sm:text-base">{asset?.name ?? manager?.name ?? "Manual adjustment"}</span>
                     <span className="truncate text-xs text-muted-foreground sm:text-sm">
                       {EVENT_LABELS[entry.type]} · {manager?.name}
                     </span>

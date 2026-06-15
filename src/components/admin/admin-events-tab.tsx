@@ -224,7 +224,7 @@ function EventRow({ event }: { event: FantasyEvent }) {
       <EventIcon type={event.type} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-bold">{asset?.name ?? "Unknown asset"}</span>
+          <span className="truncate text-sm font-bold">{asset?.name ?? manager?.name ?? "Manual adjustment"}</span>
           <PointsPill points={event.points} size="sm" />
         </div>
         <div className="truncate text-xs text-muted-foreground">
