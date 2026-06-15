@@ -11,7 +11,8 @@ const getLiveData = unstable_cache(
     const matches = await provider.getMatches();
     const liveMatches = matches.filter((m) => m.status === "live");
     const events = liveMatches.length > 0 ? await provider.getLiveEvents(liveMatches) : [];
-    return { matches, events, fetchedAt: new Date().toISOString() };
+    const nonAppearingAssetIds = (await provider.getNonAppearingAssetIds?.(matches)) ?? [];
+    return { matches, events, nonAppearingAssetIds, fetchedAt: new Date().toISOString() };
   },
   ["live-data"],
   { revalidate: Number(process.env.LIVE_DATA_CACHE_SECONDS) || DEFAULT_CACHE_SECONDS },
@@ -36,6 +37,7 @@ export async function GET() {
     return NextResponse.json({
       matches: [],
       events: [],
+      nonAppearingAssetIds: [],
       fetchedAt: new Date().toISOString(),
       source: isMockMode() ? "mock" : "api",
     });

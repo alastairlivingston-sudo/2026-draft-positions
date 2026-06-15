@@ -127,6 +127,30 @@ describe("syncMatches", () => {
     expect(after.homeScore).toBe(before.homeScore);
     expect(after.awayScore).toBe(before.awayScore);
   });
+
+  it("does not award a clean sheet to a squad GK/Defender in nonAppearingAssetIds", () => {
+    // m13: Spain vs Cape Verde - Spain's only squad GK/Defender is Pedro Porro (sac-4).
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m13")!;
+    expect(before.status).toBe("upcoming");
+
+    useLeagueStore
+      .getState()
+      .syncMatches([{ ...before, status: "completed", homeScore: 0, awayScore: 0, minute: 90 }], ["sac-4"]);
+
+    const state = useLeagueStore.getState();
+    const porroEvents = state.fantasyEvents.filter((e) => e.assetId === "sac-4" && e.matchId === "m13");
+    expect(porroEvents.some((e) => e.type === "clean_sheet")).toBe(false);
+  });
+
+  it("awards a clean sheet to a squad GK/Defender not in nonAppearingAssetIds", () => {
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m13")!;
+
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 0, awayScore: 0, minute: 90 }]);
+
+    const state = useLeagueStore.getState();
+    const porroEvents = state.fantasyEvents.filter((e) => e.assetId === "sac-4" && e.matchId === "m13");
+    expect(porroEvents.some((e) => e.type === "clean_sheet")).toBe(true);
+  });
 });
 
 describe("audit log", () => {

@@ -100,8 +100,12 @@ export interface LeagueStore extends LeagueData {
    * provider into the store (skipping locked matches). For any match
    * newly reported as "completed", also computes and ingests its
    * result-based events (clean sheets, team win/loss/3+ bonuses).
+   *
+   * `nonAppearingAssetIds` (from EspnProvider.getNonAppearingAssetIds)
+   * lists squad GK/Defender asset ids that didn't appear in their match
+   * at all, so they're excluded from the automatic clean_sheet bonus.
    */
-  syncMatches: (apiMatches: Match[]) => void;
+  syncMatches: (apiMatches: Match[], nonAppearingAssetIds?: string[]) => void;
 
   resetToSeed: () => void;
 }
@@ -472,10 +476,11 @@ export const useLeagueStore = create<LeagueStore>()(
         return newEvents.length;
       },
 
-      syncMatches: (apiMatches) => {
+      syncMatches: (apiMatches, nonAppearingAssetIds) => {
         const state = get();
         const apiById = new Map(apiMatches.map((m) => [m.id, m]));
         const existingIds = new Set(state.matches.map((m) => m.id));
+        const nonPlaying = new Set(nonAppearingAssetIds ?? []);
         let resultEvents: RawApiEvent[] = [];
 
         const matches = state.matches.map((match) => {
@@ -492,7 +497,7 @@ export const useLeagueStore = create<LeagueStore>()(
           };
 
           if (match.status !== "completed" && updated.status === "completed") {
-            resultEvents = [...resultEvents, ...computeMatchResultEvents(updated, state.squadAssets)];
+            resultEvents = [...resultEvents, ...computeMatchResultEvents(updated, state.squadAssets, nonPlaying)];
           }
 
           return updated;
@@ -504,7 +509,7 @@ export const useLeagueStore = create<LeagueStore>()(
         const newMatches = apiMatches.filter((m) => !existingIds.has(m.id));
         for (const match of newMatches) {
           if (match.status === "completed") {
-            resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets)];
+            resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets, nonPlaying)];
           }
         }
 

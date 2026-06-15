@@ -21,4 +21,13 @@ export interface ApiProvider {
    * (fixtureId + assetId + minute + type + detail) before persisting.
    */
   getLiveEvents(matches: Match[]): Promise<RawApiEvent[]>;
+
+  /**
+   * Optional: for completed matches where a clean sheet is possible,
+   * returns the squad GK/Defender asset ids that never appeared in the
+   * match at all (per provider roster data), so
+   * computeMatchResultEvents can skip their clean_sheet bonus. Only
+   * EspnProvider implements this - other providers have no roster data.
+   */
+  getNonAppearingAssetIds?(matches: Match[]): Promise<string[]>;
 }

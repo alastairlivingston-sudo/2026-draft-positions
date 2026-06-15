@@ -1,6 +1,7 @@
 import { countryCode } from "@/lib/countries";
 import { ESPN_FIXTURE_ID_MAP, ESPN_SCOREBOARD_DATE_RANGE } from "@/lib/data/espn-fixture-map";
 import { SEED_MATCHES, SEED_SQUAD_ASSETS } from "@/lib/data/seed";
+import { CLEAN_SHEET_POSITIONS } from "@/lib/scoring";
 import type { FantasyEventType, Match, MatchStatus, RawApiEvent, SquadAsset } from "@/lib/types";
 import type { ApiProvider } from "./types";
 
@@ -43,8 +44,23 @@ interface EspnKeyEvent {
   participants?: { athlete: { displayName: string } }[];
 }
 
-interface EspnSummaryResponse {
+/** A single player's roster entry from ESPN's summary "rosters" array. */
+export interface EspnRosterPlayer {
+  /** True if the player started the match. */
+  starter?: boolean;
+  /** True if the player came on as a substitute at some point. */
+  subbedIn?: boolean;
+  athlete?: { displayName: string };
+}
+
+export interface EspnRosterGroup {
+  homeAway: "home" | "away";
+  roster: EspnRosterPlayer[];
+}
+
+export interface EspnSummaryResponse {
   keyEvents?: EspnKeyEvent[];
+  rosters?: EspnRosterGroup[];
 }
 
 const PLAYER_ASSETS_BY_NAME = new Map(
@@ -239,6 +255,46 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
   return [];
 }
 
+/** Countries with at least one squad GK/Defender, for whom a clean sheet
+ *  bonus is fantasy-relevant. */
+const CLEAN_SHEET_COUNTRIES = new Set(
+  SEED_SQUAD_ASSETS.filter((a) => a.assetType === "player" && CLEAN_SHEET_POSITIONS.includes(a.position)).map(
+    (a) => a.country,
+  ),
+);
+
+/**
+ * For a completed match where one side conceded 0, finds that side's
+ * squad GK/Defender asset ids who never appeared in the match at all -
+ * not in the starting XI and never subbed on - per ESPN's roster data.
+ * Used to exclude them from the automatic clean_sheet bonus in
+ * computeMatchResultEvents (src/lib/scoring.ts), which otherwise assumes
+ * every squad GK/Defender for that country played.
+ */
+export function findNonAppearingCleanSheetAssetIds(json: EspnSummaryResponse, match: Match): string[] {
+  if (match.homeScore === null || match.awayScore === null) return [];
+
+  const sides: { team: string; conceded: number; homeAway: "home" | "away" }[] = [
+    { team: match.homeTeam, conceded: match.awayScore, homeAway: "home" },
+    { team: match.awayTeam, conceded: match.homeScore, homeAway: "away" },
+  ];
+
+  const ids: string[] = [];
+  for (const side of sides) {
+    if (side.conceded !== 0 || !CLEAN_SHEET_COUNTRIES.has(side.team)) continue;
+
+    const roster = json.rosters?.find((r) => r.homeAway === side.homeAway)?.roster ?? [];
+    for (const entry of roster) {
+      if (entry.starter || entry.subbedIn) continue;
+      const asset = findPlayerAsset(entry.athlete?.displayName);
+      if (asset && asset.country === side.team && CLEAN_SHEET_POSITIONS.includes(asset.position)) {
+        ids.push(asset.id);
+      }
+    }
+  }
+  return ids;
+}
+
 /**
  * Adapter for ESPN's free, unauthenticated public scoreboard API - no key
  * required, unlike API-Football (whose free tier doesn't cover the 2026
@@ -306,6 +362,30 @@ export class EspnProvider implements ApiProvider {
 
         const json = (await res.json()) as EspnSummaryResponse;
         return (json.keyEvents ?? []).flatMap((event) => mapKeyEvent(match.id, event));
+      }),
+    );
+
+    return perMatch.flat();
+  }
+
+  async getNonAppearingAssetIds(matches: Match[]): Promise<string[]> {
+    const candidates = matches.filter((m) => {
+      if (m.status !== "completed" || m.homeScore === null || m.awayScore === null) return false;
+      if (resolveEspnId(m.id) === undefined) return false;
+      const homeKeptCleanSheet = m.awayScore === 0 && CLEAN_SHEET_COUNTRIES.has(m.homeTeam);
+      const awayKeptCleanSheet = m.homeScore === 0 && CLEAN_SHEET_COUNTRIES.has(m.awayTeam);
+      return homeKeptCleanSheet || awayKeptCleanSheet;
+    });
+    if (candidates.length === 0) return [];
+
+    const perMatch = await Promise.all(
+      candidates.map(async (match) => {
+        const espnId = resolveEspnId(match.id);
+        const res = await fetch(`${BASE_URL}/summary?event=${espnId}`, { cache: "no-store" });
+        if (!res.ok) return [];
+
+        const json = (await res.json()) as EspnSummaryResponse;
+        return findNonAppearingCleanSheetAssetIds(json, match);
       }),
     );
 
