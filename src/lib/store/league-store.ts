@@ -396,7 +396,7 @@ export const useLeagueStore = create<LeagueStore>()(
       resetToSeed: () => set({ ...initialState }),
     }),
     {
-      name: "wc-fantasy-league-v1",
+      name: "wc-fantasy-league-v2",
       storage: createJSONStorage(() => localStorage),
     },
   ),
