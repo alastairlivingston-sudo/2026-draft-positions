@@ -1,3 +1,5 @@
+import { FIXTURE_ID_MAP } from "@/lib/data/api-football-mapping";
+
 import { ApiFootballProvider } from "./api-football-provider";
 import { EspnProvider } from "./espn-provider";
 import { mockProvider } from "./mock-provider";
@@ -19,15 +21,18 @@ export function isMockMode(): boolean {
  * `EspnProvider`, which pulls live World Cup 2026 scores/events from
  * ESPN's free public scoreboard API - no key required.
  *
- * If `API_FOOTBALL_KEY` is also set, the legacy `ApiFootballProvider`
- * is used instead (see src/lib/data/api-football-mapping.ts) - note
- * its free tier does not cover the 2026 World Cup.
+ * If `API_FOOTBALL_KEY` is set *and* `FIXTURE_ID_MAP` has been
+ * populated, the legacy `ApiFootballProvider` is used instead (see
+ * src/lib/data/api-football-mapping.ts) - note its free tier does not
+ * cover the 2026 World Cup. An `API_FOOTBALL_KEY` left over from earlier
+ * setup with an empty `FIXTURE_ID_MAP` is ignored, so it can't silently
+ * shadow `EspnProvider` with a provider that always returns no data.
  */
 export function getApiProvider(): ApiProvider {
   if (isMockMode()) return mockProvider;
 
   const apiKey = process.env.API_FOOTBALL_KEY;
-  if (apiKey) return new ApiFootballProvider(apiKey);
+  if (apiKey && Object.keys(FIXTURE_ID_MAP).length > 0) return new ApiFootballProvider(apiKey);
 
   return new EspnProvider();
 }

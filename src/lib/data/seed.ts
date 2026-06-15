@@ -317,10 +317,10 @@ export const SEED_MATCHES: Match[] = [
     awayTeam: "Cape Verde",
     awayCountryCode: countryCode("Cape Verde"),
     kickoff: "2026-06-15T16:00:00Z",
-    status: "live",
-    homeScore: 2,
-    awayScore: 0,
-    minute: 63,
+    status: "upcoming",
+    homeScore: null,
+    awayScore: null,
+    minute: null,
     venue: "Mercedes-Benz Stadium, Atlanta, Georgia",
     locked: false,
   },
@@ -463,9 +463,10 @@ export const SEED_MATCHES: Match[] = [
 
 // Fantasy events for the 12 completed matches are the clean-sheet/team
 // win-loss bonuses computeMatchResultEvents would derive from their real
-// final scores, plus the handful of real goals/assists by squad players
-// found in ESPN's play-by-play. Match 13 (live) carries a scripted set of
-// events for the mock provider's live demo - see src/lib/api/mock-provider.ts.
+// final scores, plus the real goals/assists by squad players confirmed
+// from ESPN's play-by-play and box score stats. Match 13 (Spain vs Cape
+// Verde) has not kicked off yet, so it has no events yet - live data
+// takes over via src/lib/api/espn-provider.ts once it does.
 export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
   // --- Match 1: Mexico 2-0 South Africa ---
   {
@@ -494,9 +495,36 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
     source: "seed",
     eventHash: null,
   },
-  // --- Match 4: USA 4-1 Paraguay ---
+  // --- Match 2: Korea Republic 2-1 Czechia ---
   {
     id: "evt-3",
+    matchId: "m2",
+    assetId: "sanford-4",
+    managerId: "sanford",
+    type: "goal",
+    points: 4,
+    minute: 67,
+    detail: "Right-footed finish from the centre of the box levels it at 1-1, assisted by Lee Kang-In",
+    createdAt: "2026-06-12T03:12:00Z",
+    source: "seed",
+    eventHash: null,
+  },
+  {
+    id: "evt-4",
+    matchId: "m2",
+    assetId: "sanford-4",
+    managerId: "sanford",
+    type: "assist",
+    points: 2,
+    minute: 80,
+    detail: "Sets up Oh Hyeon-Gyu's close-range finish to make it 2-1",
+    createdAt: "2026-06-12T03:25:00Z",
+    source: "seed",
+    eventHash: null,
+  },
+  // --- Match 4: USA 4-1 Paraguay ---
+  {
+    id: "evt-5",
     matchId: "m4",
     assetId: "jamie-7",
     managerId: "jamie",
@@ -510,7 +538,7 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
   },
   // --- Match 7: Haiti 0-1 Scotland ---
   {
-    id: "evt-4",
+    id: "evt-6",
     matchId: "m7",
     assetId: "lev-8",
     managerId: "lev",
@@ -524,7 +552,7 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
   },
   // --- Match 8: Australia 2-0 Türkiye ---
   {
-    id: "evt-5",
+    id: "evt-7",
     matchId: "m8",
     assetId: "polak-2",
     managerId: "polak",
@@ -537,7 +565,7 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
     eventHash: null,
   },
   {
-    id: "evt-6",
+    id: "evt-8",
     matchId: "m8",
     assetId: "josh-6",
     managerId: "josh",
@@ -551,21 +579,34 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
   },
   // --- Match 9: Germany 7-1 Curacao ---
   {
-    id: "evt-7",
+    id: "evt-9",
     matchId: "m9",
     assetId: "lev-1",
     managerId: "lev",
-    type: "assist",
-    points: 2,
+    type: "goal",
+    points: 4,
+    minute: 45,
+    detail: "Converts a penalty to make it 3-1",
+    createdAt: "2026-06-14T17:52:00Z",
+    source: "seed",
+    eventHash: null,
+  },
+  {
+    id: "evt-10",
+    matchId: "m9",
+    assetId: "lev-1",
+    managerId: "lev",
+    type: "goal",
+    points: 4,
     minute: 88,
-    detail: "Assists Deniz Undav's goal with a through ball on the break",
+    detail: "Latches onto a Deniz Undav through ball on the break to make it 7-1",
     createdAt: "2026-06-14T18:30:00Z",
     source: "seed",
     eventHash: null,
   },
   // --- Match 11: Ivory Coast 1-0 Ecuador ---
   {
-    id: "evt-8",
+    id: "evt-11",
     matchId: "m11",
     assetId: "josh-3",
     managerId: "josh",
@@ -574,59 +615,6 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
     minute: 90,
     detail: "Ivory Coast keep a clean sheet",
     createdAt: "2026-06-15T00:50:00Z",
-    source: "seed",
-    eventHash: null,
-  },
-  // --- Match 13: Spain 2-0 Cape Verde (LIVE) ---
-  {
-    id: "evt-9",
-    matchId: "m13",
-    assetId: "sac-2",
-    managerId: "sac",
-    type: "goal",
-    points: 4,
-    minute: 15,
-    detail: "Cuts in from the left and finishes far corner",
-    createdAt: "2026-06-15T16:16:00Z",
-    source: "seed",
-    eventHash: null,
-  },
-  {
-    id: "evt-10",
-    matchId: "m13",
-    assetId: "sac-1",
-    managerId: "sac",
-    type: "assist",
-    points: 2,
-    minute: 15,
-    detail: "Slide-rule pass sets up Williams",
-    createdAt: "2026-06-15T16:16:00Z",
-    source: "seed",
-    eventHash: null,
-  },
-  {
-    id: "evt-11",
-    matchId: "m13",
-    assetId: "sac-4",
-    managerId: "sac",
-    type: "yellow_card",
-    points: -1,
-    minute: 38,
-    detail: "Booked for a foul in midfield",
-    createdAt: "2026-06-15T16:39:00Z",
-    source: "seed",
-    eventHash: null,
-  },
-  {
-    id: "evt-12",
-    matchId: "m13",
-    assetId: "sac-1",
-    managerId: "sac",
-    type: "goal",
-    points: 4,
-    minute: 50,
-    detail: "Arrives late in the box to double the lead",
-    createdAt: "2026-06-15T16:52:00Z",
     source: "seed",
     eventHash: null,
   },

@@ -31,7 +31,8 @@ export async function GET() {
   try {
     const data = await getLiveData();
     return NextResponse.json({ ...data, source: isMockMode() ? "mock" : "api" });
-  } catch {
+  } catch (error) {
+    console.error("[/api/live] live data fetch failed:", error);
     return NextResponse.json({
       matches: [],
       events: [],
