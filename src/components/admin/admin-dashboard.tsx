@@ -1,35 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
-
 import { AdminAdjustmentsTab } from "@/components/admin/admin-adjustments-tab";
 import { AdminAuditTab } from "@/components/admin/admin-audit-tab";
 import { AdminEventsTab } from "@/components/admin/admin-events-tab";
+import { AdminMappingTab } from "@/components/admin/admin-mapping-tab";
 import { AdminMatchesTab } from "@/components/admin/admin-matches-tab";
 import { AdminScoringTab } from "@/components/admin/admin-scoring-tab";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function AdminDashboard() {
-  const router = useRouter();
-
-  async function handleLogout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.refresh();
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Admin Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Manage events, adjustments, scoring rules and matches</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
-          <LogOut className="h-4 w-4" />
-          Log out
-        </Button>
+      <div>
+        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Admin Dashboard</h1>
+        <p className="text-sm text-muted-foreground">Manage events, adjustments, scoring rules, matches and squad mapping</p>
       </div>
 
       <Tabs defaultValue="events">
@@ -39,6 +23,7 @@ export function AdminDashboard() {
             <TabsTrigger value="adjustments">Adjustments</TabsTrigger>
             <TabsTrigger value="scoring">Scoring</TabsTrigger>
             <TabsTrigger value="matches">Matches</TabsTrigger>
+            <TabsTrigger value="mapping">Mapping</TabsTrigger>
             <TabsTrigger value="audit">Audit Log</TabsTrigger>
           </TabsList>
         </div>
@@ -53,6 +38,9 @@ export function AdminDashboard() {
         </TabsContent>
         <TabsContent value="matches" className="pt-3">
           <AdminMatchesTab />
+        </TabsContent>
+        <TabsContent value="mapping" className="pt-3">
+          <AdminMappingTab />
         </TabsContent>
         <TabsContent value="audit" className="pt-3">
           <AdminAuditTab />

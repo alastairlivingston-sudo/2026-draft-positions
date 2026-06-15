@@ -1,9 +1,6 @@
 import { MatchesView } from "@/components/matches/matches-view";
-import { isAdminAuthenticated } from "@/lib/auth";
 
-export default async function MatchesPage() {
-  const isAdmin = await isAdminAuthenticated();
-
+export default function MatchesPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -12,7 +9,7 @@ export default async function MatchesPage() {
           Group stage fixtures, live scores and the fantasy assets riding on each one
         </p>
       </div>
-      <MatchesView isAdmin={isAdmin} />
+      <MatchesView />
     </div>
   );
 }

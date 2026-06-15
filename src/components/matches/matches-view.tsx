@@ -7,11 +7,7 @@ import type { MatchStatus } from "@/lib/types";
 
 const STATUS_ORDER: Record<MatchStatus, number> = { live: 0, upcoming: 1, completed: 2 };
 
-interface MatchesViewProps {
-  isAdmin: boolean;
-}
-
-export function MatchesView({ isAdmin }: MatchesViewProps) {
+export function MatchesView() {
   const data = useLeagueStore((s) => s);
   const toggleMatchLock = useLeagueStore((s) => s.toggleMatchLock);
 
@@ -32,13 +28,7 @@ export function MatchesView({ isAdmin }: MatchesViewProps) {
         });
 
         return (
-          <MatchCard
-            key={match.id}
-            match={match}
-            assets={assets}
-            isAdmin={isAdmin}
-            onToggleLock={() => toggleMatchLock(match.id)}
-          />
+          <MatchCard key={match.id} match={match} assets={assets} onToggleLock={() => toggleMatchLock(match.id)} />
         );
       })}
     </div>

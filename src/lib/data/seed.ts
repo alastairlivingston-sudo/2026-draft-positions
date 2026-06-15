@@ -464,9 +464,12 @@ export const SEED_MATCHES: Match[] = [
 // Fantasy events for the 12 completed matches are the clean-sheet/team
 // win-loss bonuses computeMatchResultEvents would derive from their real
 // final scores, plus the real goals/assists by squad players confirmed
-// from ESPN's play-by-play and box score stats. Match 13 (Spain vs Cape
-// Verde) has not kicked off yet, so it has no events yet - live data
-// takes over via src/lib/api/espn-provider.ts once it does.
+// from ESPN's play-by-play and box score stats, plus a couple of manual
+// corrections (see SEED_AUDIT_LOG) for cases the automatic final-score
+// derivation gets wrong - e.g. a clean sheet for a player substituted
+// before the team conceded. Match 13 (Spain vs Cape Verde) has not
+// kicked off yet, so it has no events yet - live data takes over via
+// src/lib/api/espn-provider.ts once it does.
 export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
   // --- Match 1: Mexico 2-0 South Africa ---
   {
@@ -536,6 +539,24 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
     source: "seed",
     eventHash: null,
   },
+  // --- Match 5: Qatar 1-1 Switzerland ---
+  // Switzerland conceded their equaliser after Ricardo Rodriguez was
+  // substituted off having played 60+ minutes - the clean sheet rule
+  // looks at whether the team conceded *while the player was on the
+  // pitch*, not the final score, so he's credited here.
+  {
+    id: "evt-12",
+    matchId: "m5",
+    assetId: "josh-1",
+    managerId: "josh",
+    type: "clean_sheet",
+    points: 2,
+    minute: 90,
+    detail: "Switzerland's equaliser came after Ricardo Rodriguez was substituted (60+ mins played, clean sheet while on the pitch)",
+    createdAt: "2026-06-13T20:50:00Z",
+    source: "seed",
+    eventHash: null,
+  },
   // --- Match 7: Haiti 0-1 Scotland ---
   {
     id: "evt-6",
@@ -564,19 +585,10 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
     source: "seed",
     eventHash: null,
   },
-  {
-    id: "evt-8",
-    matchId: "m8",
-    assetId: "josh-6",
-    managerId: "josh",
-    type: "clean_sheet",
-    points: 2,
-    minute: 90,
-    detail: "Australia keep a clean sheet",
-    createdAt: "2026-06-14T05:50:00Z",
-    source: "seed",
-    eventHash: null,
-  },
+  // Note: Joe Gauci is not part of Australia's World Cup squad, so he
+  // didn't play and gets no clean sheet credit for this match - see
+  // SEED_AUDIT_LOG for the correction. Re-map this squad slot to the
+  // correct Australia goalkeeper from the Mapping tab.
   // --- Match 9: Germany 7-1 Curacao ---
   {
     id: "evt-9",
@@ -620,29 +632,45 @@ export const SEED_FANTASY_EVENTS: FantasyEvent[] = [
   },
 ];
 
-export const SEED_MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
-  {
-    id: "madj-1",
-    managerId: "ally",
-    assetId: null,
-    points: -1,
-    reason: "Late squad change penalty (missed Round 1 deadline by 4 minutes)",
-    createdAt: "2026-06-11T12:00:00Z",
-    createdBy: "admin",
-  },
-];
+export const SEED_MANUAL_ADJUSTMENTS: ManualAdjustment[] = [];
 
 export const SEED_AUDIT_LOG: AuditLogEntry[] = [
   {
-    id: "audit-1",
-    action: "manual_adjustment",
+    id: "audit-15",
+    action: "delete_adjustment",
     actor: "admin",
     managerId: "ally",
     managerName: "Ally",
-    oldValue: "0",
-    newValue: "-1",
-    reason: "Late squad change penalty (missed Round 1 deadline by 4 minutes)",
-    timestamp: "2026-06-11T12:00:00Z",
+    oldValue: "-1 (Late squad change penalty)",
+    newValue: "0",
+    reason: "No valid reason for the deduction - reversed, Ally's total returns to 0 with no manual adjustments.",
+    timestamp: "2026-06-15T09:10:00Z",
+  },
+  {
+    id: "audit-14",
+    action: "create_event",
+    actor: "admin",
+    managerId: "josh",
+    managerName: "Josh",
+    assetId: "josh-1",
+    assetName: "Ricardo Rodriguez",
+    oldValue: "—",
+    newValue: "clean_sheet (90', +2 pts)",
+    reason: "Ricardo Rodriguez played 60+ minutes and was off the pitch before Switzerland conceded - clean sheet credited per the 60-minute / on-pitch rule.",
+    timestamp: "2026-06-15T09:05:00Z",
+  },
+  {
+    id: "audit-13b",
+    action: "delete_event",
+    actor: "admin",
+    managerId: "josh",
+    managerName: "Josh",
+    assetId: "josh-6",
+    assetName: "Joe Gauci",
+    oldValue: "clean_sheet (90', +2 pts)",
+    newValue: "deleted",
+    reason: "Joe Gauci is not part of Australia's World Cup squad, so he did not play and earns no points from this match.",
+    timestamp: "2026-06-15T09:00:00Z",
   },
   {
     id: "audit-2",

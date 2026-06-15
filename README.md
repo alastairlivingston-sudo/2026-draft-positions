@@ -3,7 +3,7 @@
 A mobile-first fantasy World Cup points tracker for a private 8-manager
 league. Friends get a shareable public link to follow the live
 leaderboard, squads, matches and event feed; the league admin gets a
-password-protected dashboard to manage scoring.
+dashboard to manage scoring.
 
 Built with Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui and
 Zustand. Ships with mocked seed data so it works immediately, with a
@@ -22,7 +22,8 @@ clean adapter layer ready to swap in a live football API and Supabase.
 - **Rules page** - the current scoring values, explained.
 - **Admin dashboard** - add/edit/delete fantasy events, manual point
   adjustments, edit scoring rules (apply going forward or recalculate
-  history), lock/unlock matches, and a full audit log.
+  history), lock/unlock matches, edit the squad-asset mapping, and a
+  full audit log.
 - **Cast mode** - a full-screen scoreboard for a TV or projector.
 - **Sharing** - copy invite link, WhatsApp share, and a QR code.
 - **PWA-friendly** - installable with a manifest and app icon.
@@ -50,9 +51,8 @@ to `localStorage` via the Zustand store in `src/lib/store/league-store.ts`.
 
 ### Admin access
 
-Visit `/league/world-cup-draft/admin` and sign in with the admin
-password (default `worldcup2026`, or whatever you set as
-`ADMIN_PASSWORD`). This sets an httpOnly session cookie.
+Visit `/league/world-cup-draft/admin` - the dashboard is open to anyone
+with the link, with no separate login.
 
 ## Environment variables
 
@@ -61,7 +61,6 @@ has a working default:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | `worldcup2026` | Password for `/league/world-cup-draft/admin`. |
 | `NEXT_PUBLIC_USE_MOCK_DATA` | `true` | Set to `false` to pull live scores/events from ESPN's free public API instead of the scripted mock data. |
 | `API_FOOTBALL_KEY` | _(none)_ | Optional legacy provider ([API-Football](https://www.api-football.com/)) - if set alongside `NEXT_PUBLIC_USE_MOCK_DATA=false`, used instead of the default ESPN provider. Its free tier doesn't cover the 2026 World Cup. |
 | `LIVE_DATA_CACHE_SECONDS` | `3600` | How long `/api/live` caches the upstream provider response, shared across all clients, so the live provider is only hit once per cache window regardless of how many browsers are open. |
@@ -81,10 +80,9 @@ src/
         matches/              # match centre
         events/               # event feed
         rules/                # scoring rules
-        admin/                # admin dashboard (password gated)
+        admin/                # admin dashboard
       cast/                  # full-screen cast mode (no nav)
       layout.tsx             # live-polling provider
-    api/admin/login|logout/  # admin session cookie endpoints
     api/live/route.ts       # cached live-data endpoint (see "Live data")
   components/
     leaderboard/, events/, matches/, squad/, admin/, shared/, ui/
@@ -98,7 +96,6 @@ src/
     data/api-football-mapping.ts  # legacy fixture/player ID map for API-Football mode
     api/                       # mock, ESPN and API-Football provider adapters
     hooks/use-live-polling.ts  # polls match status + live events
-    auth.ts                    # admin password/session helpers
 supabase/schema.sql          # Supabase schema for a future backend
 ```
 
@@ -186,8 +183,7 @@ recalculation, and audit log entries.
 
 1. Push this repo to GitHub.
 2. Import it into [Vercel](https://vercel.com/new).
-3. Add the environment variables above (at minimum, set
-   `ADMIN_PASSWORD` to something private).
+3. Add the environment variables above if you want to change the defaults.
 4. Deploy. The app is fully static/SSR-friendly and needs no database
    for the MVP.
 
@@ -202,9 +198,9 @@ leaderboard page all point at that URL.
   until that browser's state is synced elsewhere. A Supabase-backed
   store (schema provided in `supabase/schema.sql`) is the natural next
   step for a shared, multi-device source of truth.
-- **Admin auth is a single shared password**, not per-user accounts.
-  `src/lib/auth.ts` is structured so it can be swapped for Supabase
-  Auth + a role check without changing call sites.
+- **The admin dashboard has no login** - anyone with the link can edit
+  scoring, events and the squad mapping. Add Supabase Auth + a role
+  check if you need to restrict access.
 - **ESPN live data covers Group Stage · Matchday 1 only.**
   `src/lib/data/espn-fixture-map.ts` maps `m1`-`m22` to ESPN's event
   IDs; add entries there (and to `SEED_MATCHES`) for later matchdays as
