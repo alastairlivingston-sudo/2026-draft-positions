@@ -1,6 +1,6 @@
 import { ESPN_FIXTURE_ID_MAP, ESPN_SCOREBOARD_DATE_RANGE } from "@/lib/data/espn-fixture-map";
 import { SEED_MATCHES, SEED_SQUAD_ASSETS } from "@/lib/data/seed";
-import type { FantasyEventType, Match, MatchStatus, RawApiEvent } from "@/lib/types";
+import type { FantasyEventType, Match, MatchStatus, RawApiEvent, SquadAsset } from "@/lib/types";
 import type { ApiProvider } from "./types";
 
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world";
@@ -44,10 +44,42 @@ const PLAYER_ASSETS_BY_NAME = new Map(
   SEED_SQUAD_ASSETS.filter((asset) => asset.assetType === "player").map((asset) => [asset.name, asset]),
 );
 
+/** Lowercase, strips diacritics/punctuation, and sorts name tokens so e.g.
+ *  "Hwang In-Beom" and "Inbeom Hwang" normalize to the same key - ESPN
+ *  often lists Korean players family-name-first, unlike our seed data. */
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[^a-z\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
+
+const PLAYER_ASSETS_BY_NORMALIZED_NAME = new Map(
+  SEED_SQUAD_ASSETS.filter((asset) => asset.assetType === "player").map((asset) => [normalizeName(asset.name), asset]),
+);
+
+/** Looks up a squad player by ESPN's athlete.displayName, falling back to a
+ *  name-order-independent match for cases like "Hwang In-Beom" vs "Inbeom Hwang". */
+function findPlayerAsset(espnName: string | undefined): SquadAsset | undefined {
+  if (!espnName) return undefined;
+  return PLAYER_ASSETS_BY_NAME.get(espnName) ?? PLAYER_ASSETS_BY_NORMALIZED_NAME.get(normalizeName(espnName));
+}
+
 function parseMinute(displayValue: string): number {
   const match = displayValue.match(/^(\d+)/);
   return match ? Number(match[1]) : 0;
 }
+
+/** ESPN goal event subtypes confirmed in live World Cup data - "goal" for
+ *  standard goals, plus headers/volleys/penalties which use distinct type
+ *  strings. Kept as an explicit allowlist (rather than a "goal---" prefix
+ *  match) so a possible future "goal---disallowed"-style VAR overturn isn't
+ *  miscounted as a scored goal. */
+const GOAL_EVENT_TYPES = new Set(["goal", "goal---header", "goal---volley", "penalty---scored"]);
 
 function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
   const type = event.type.type;
@@ -55,28 +87,28 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
   const detail = event.text ?? "";
   const participants = event.participants ?? [];
 
-  if (type === "goal") {
+  if (GOAL_EVENT_TYPES.has(type)) {
     const events: RawApiEvent[] = [];
-    const scorer = PLAYER_ASSETS_BY_NAME.get(participants[0]?.athlete.displayName ?? "");
+    const scorer = findPlayerAsset(participants[0]?.athlete.displayName);
     if (scorer) events.push({ fixtureId, assetId: scorer.id, type: "goal", minute, detail });
-    const assister = PLAYER_ASSETS_BY_NAME.get(participants[1]?.athlete.displayName ?? "");
+    const assister = findPlayerAsset(participants[1]?.athlete.displayName);
     if (assister) events.push({ fixtureId, assetId: assister.id, type: "assist", minute, detail });
     return events;
   }
 
   if (type === "own-goal") {
-    const scorer = PLAYER_ASSETS_BY_NAME.get(participants[participants.length - 1]?.athlete.displayName ?? "");
+    const scorer = findPlayerAsset(participants[participants.length - 1]?.athlete.displayName);
     return scorer ? [{ fixtureId, assetId: scorer.id, type: "own_goal", minute, detail }] : [];
   }
 
   if (type === "yellow-card" || type === "red-card") {
-    const player = PLAYER_ASSETS_BY_NAME.get(participants[0]?.athlete.displayName ?? "");
+    const player = findPlayerAsset(participants[0]?.athlete.displayName);
     const eventType: FantasyEventType = type === "yellow-card" ? "yellow_card" : "red_card";
     return player ? [{ fixtureId, assetId: player.id, type: eventType, minute, detail }] : [];
   }
 
-  if (type === "penalty-missed") {
-    const player = PLAYER_ASSETS_BY_NAME.get(participants[0]?.athlete.displayName ?? "");
+  if (type.includes("penalty") && type.includes("missed")) {
+    const player = findPlayerAsset(participants[0]?.athlete.displayName);
     return player ? [{ fixtureId, assetId: player.id, type: "penalty_missed", minute, detail }] : [];
   }
 
