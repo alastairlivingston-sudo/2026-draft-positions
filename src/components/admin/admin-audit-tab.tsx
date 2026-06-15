@@ -16,6 +16,7 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   lock_match: "Match locked",
   unlock_match: "Match unlocked",
   update_squad_asset: "Squad mapping updated",
+  update_match: "Match result updated",
 };
 
 export function AdminAuditTab() {

@@ -150,11 +150,17 @@ On each response:
 - **ESPN mode**: set `NEXT_PUBLIC_USE_MOCK_DATA=false`. No API key
   needed. `src/lib/api/espn-provider.ts` pulls real scores/events from
   ESPN's free public scoreboard for the fixtures listed in
-  `src/lib/data/espn-fixture-map.ts` (currently Group Stage · Matchday
-  1, `m1`-`m22`). Goals, assists, cards and own goals for squad players
+  `src/lib/data/espn-fixture-map.ts` (currently Group Stage · Matchdays
+  1-3, `m1`-`m66`). Goals, assists, cards and own goals for squad players
   are matched by name against ESPN's `keyEvents` feed - no per-player ID
   mapping needed. Penalty saves aren't reported as a distinct event and
   still need to be logged manually from the admin dashboard.
+- **Manual result correction**: the admin Matches tab has an "Edit
+  result" button on every fixture, for use when a match isn't covered by
+  the live provider yet (e.g. knockout rounds) or its data is wrong.
+  Setting status/scores there and marking a match "Completed" awards
+  clean sheet and team result bonuses immediately, via the same
+  `computeMatchResultEvents` logic the live sync uses.
 - **API-Football mode (legacy)**: set `NEXT_PUBLIC_USE_MOCK_DATA=false`
   and `API_FOOTBALL_KEY` (server-side env vars only - never expose this
   key to the browser). `src/lib/api/api-football-provider.ts` calls
@@ -201,11 +207,12 @@ leaderboard page all point at that URL.
 - **The admin dashboard has no login** - anyone with the link can edit
   scoring, events and the squad mapping. Add Supabase Auth + a role
   check if you need to restrict access.
-- **ESPN live data covers Group Stage · Matchday 1 only.**
-  `src/lib/data/espn-fixture-map.ts` maps `m1`-`m22` to ESPN's event
-  IDs; add entries there (and to `SEED_MATCHES`) for later matchdays as
-  they're played. Penalty saves have no API event and need manual entry
-  either way.
+- **ESPN live data covers Group Stage · Matchdays 1-3 only.**
+  `src/lib/data/espn-fixture-map.ts` maps `m1`-`m66` to ESPN's event
+  IDs; add entries there (and to `SEED_MATCHES`) once the knockout
+  bracket is set. Until then (or if ESPN's data is wrong), use the
+  admin Matches tab's "Edit result" button to enter results by hand.
+  Penalty saves have no API event and need manual entry either way.
 - **API-Football integration (legacy) needs ID mapping and a paid
   plan.** The provider is fully implemented
   (`src/lib/api/api-football-provider.ts`), but
