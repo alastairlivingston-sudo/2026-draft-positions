@@ -38,6 +38,7 @@ export async function GET() {
       events: [],
       fetchedAt: new Date().toISOString(),
       source: isMockMode() ? "mock" : "api",
+      debugError: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     });
   }
 }
