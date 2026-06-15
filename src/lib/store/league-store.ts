@@ -475,6 +475,7 @@ export const useLeagueStore = create<LeagueStore>()(
       syncMatches: (apiMatches) => {
         const state = get();
         const apiById = new Map(apiMatches.map((m) => [m.id, m]));
+        const existingIds = new Set(state.matches.map((m) => m.id));
         let resultEvents: RawApiEvent[] = [];
 
         const matches = state.matches.map((match) => {
@@ -497,7 +498,17 @@ export const useLeagueStore = create<LeagueStore>()(
           return updated;
         });
 
-        set({ matches });
+        // Newly-discovered fixtures (e.g. knockout matches the provider finds
+        // dynamically) aren't in state.matches yet - append them so they show
+        // up in the UI and get synced like any other match from now on.
+        const newMatches = apiMatches.filter((m) => !existingIds.has(m.id));
+        for (const match of newMatches) {
+          if (match.status === "completed") {
+            resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets)];
+          }
+        }
+
+        set({ matches: [...matches, ...newMatches] });
         if (resultEvents.length > 0) {
           get().ingestApiEvents(resultEvents, "api");
         }

@@ -3,12 +3,20 @@
  * so src/lib/api/espn-provider.ts can pull live status/scores/events for
  * the right fixture from ESPN's public scoreboard:
  *
- *   https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260628
+ *   https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260720
  *   https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event={id}
  *
- * Covers FIFA World Cup 2026 Group Stage · Matchday 1-3 (m1-m66). Add
- * entries here (and to SEED_MATCHES) for the knockout rounds once the
- * bracket is set.
+ * Covers FIFA World Cup 2026 Group Stage · Matchday 1-3 (m1-m66) - these
+ * fixtures and their scoring have been validated, so this map is
+ * intentionally left untouched for the knockout rounds.
+ *
+ * Round of 32 onward isn't pre-mapped here because the matchups aren't
+ * known until the group stage concludes. Instead,
+ * espn-provider.ts#discoverDynamicMatches scans the wider
+ * ESPN_SCOREBOARD_DATE_RANGE below (which already covers the whole
+ * tournament) for any fixture not listed in this map that involves a
+ * country picked by a squad, and adds it as a new Match automatically -
+ * purely additive, it never changes how m1-m66 are synced.
  */
 export const ESPN_FIXTURE_ID_MAP: Record<string, number> = {
   // Matchday 1
@@ -82,5 +90,10 @@ export const ESPN_FIXTURE_ID_MAP: Record<string, number> = {
   m66: 760483,
 };
 
-/** ESPN scoreboard date range covering all fixtures in ESPN_FIXTURE_ID_MAP. */
-export const ESPN_SCOREBOARD_DATE_RANGE = "20260611-20260628";
+/**
+ * ESPN scoreboard date range covering the entire tournament (group stage
+ * through the final on 2026-07-19, plus a one-day buffer), so
+ * espn-provider.ts can both sync ESPN_FIXTURE_ID_MAP's group-stage fixtures
+ * and dynamically discover knockout fixtures in a single request.
+ */
+export const ESPN_SCOREBOARD_DATE_RANGE = "20260611-20260720";
