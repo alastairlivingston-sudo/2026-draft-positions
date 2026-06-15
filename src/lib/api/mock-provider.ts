@@ -2,7 +2,7 @@ import { SEED_MATCHES } from "@/lib/data/seed";
 import type { ApiProvider } from "./types";
 import type { RawApiEvent } from "@/lib/types";
 
-const LIVE_MATCH_ID = "m4";
+const LIVE_MATCH_ID = "m13";
 
 // A small "script" of events that trickle in for the live match while the
 // app is open, so the live event feed and rank-movement indicators have
@@ -13,10 +13,10 @@ const MOCK_LIVE_SCRIPT: { revealAfterMs: number; event: RawApiEvent }[] = [
     revealAfterMs: 60_000,
     event: {
       fixtureId: LIVE_MATCH_ID,
-      assetId: "josh-3",
+      assetId: "sac-6",
       type: "yellow_card",
       minute: 75,
-      detail: "Booked for a foul breaking up a counter-attack",
+      detail: "Booked for a tactical foul to stop a Spain counter-attack",
     },
   },
   {

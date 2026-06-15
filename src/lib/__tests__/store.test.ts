@@ -62,7 +62,7 @@ describe("addManualAdjustment", () => {
 describe("updateScoringValues", () => {
   it("recalculates historical event points when mode is 'recalculate'", () => {
     const state = useLeagueStore.getState();
-    const goalEvent = state.fantasyEvents.find((e) => e.assetId === "ally-1" && e.type === "goal");
+    const goalEvent = state.fantasyEvents.find((e) => e.assetId === "polak-2" && e.type === "goal");
     expect(goalEvent?.points).toBe(4);
 
     useLeagueStore.getState().updateScoringValues({ ...state.scoringValues, goal: 6 }, "recalculate");
@@ -73,7 +73,7 @@ describe("updateScoringValues", () => {
 
   it("leaves historical event points untouched when mode is 'forward'", () => {
     const state = useLeagueStore.getState();
-    const goalEvent = state.fantasyEvents.find((e) => e.assetId === "ally-1" && e.type === "goal");
+    const goalEvent = state.fantasyEvents.find((e) => e.assetId === "polak-2" && e.type === "goal");
     expect(goalEvent?.points).toBe(4);
 
     useLeagueStore.getState().updateScoringValues({ ...state.scoringValues, goal: 6 }, "forward");
@@ -86,33 +86,33 @@ describe("updateScoringValues", () => {
 
 describe("syncMatches", () => {
   it("updates match status/score and ingests result events for a newly-completed match", () => {
-    const before = useLeagueStore.getState().matches.find((m) => m.id === "m6")!;
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m18")!;
     expect(before.status).toBe("upcoming");
 
     const polakBefore = getManagerTotal(useLeagueStore.getState(), "polak");
 
     useLeagueStore.getState().syncMatches([
-      { ...before, status: "completed", homeScore: 3, awayScore: 1, minute: 90 },
+      { ...before, status: "completed", homeScore: 1, awayScore: 3, minute: 90 },
     ]);
 
     const state = useLeagueStore.getState();
-    const after = state.matches.find((m) => m.id === "m6")!;
+    const after = state.matches.find((m) => m.id === "m18")!;
     expect(after.status).toBe("completed");
-    expect(after.homeScore).toBe(3);
-    expect(after.awayScore).toBe(1);
+    expect(after.homeScore).toBe(1);
+    expect(after.awayScore).toBe(3);
 
     // Norway (polak-8, a "Team" asset) won and scored 3+.
-    const norwayEvents = state.fantasyEvents.filter((e) => e.assetId === "polak-8" && e.matchId === "m6");
+    const norwayEvents = state.fantasyEvents.filter((e) => e.assetId === "polak-8" && e.matchId === "m18");
     expect(norwayEvents.map((e) => e.type)).toEqual(expect.arrayContaining(["team_win", "team_scored_3plus"]));
     expect(getManagerTotal(state, "polak")).toBe(polakBefore + 2);
   });
 
   it("does not duplicate result events when synced again", () => {
-    const before = useLeagueStore.getState().matches.find((m) => m.id === "m6")!;
-    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 3, awayScore: 1, minute: 90 }]);
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m18")!;
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 1, awayScore: 3, minute: 90 }]);
 
     const afterFirst = useLeagueStore.getState().fantasyEvents.length;
-    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 3, awayScore: 1, minute: 90 }]);
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 1, awayScore: 3, minute: 90 }]);
 
     expect(useLeagueStore.getState().fantasyEvents.length).toBe(afterFirst);
   });
@@ -149,12 +149,12 @@ describe("audit log", () => {
 
   it("records lock/unlock match actions", () => {
     const before = useLeagueStore.getState().auditLog.length;
-    const wasLocked = useLeagueStore.getState().matches.find((m) => m.id === "m5")!.locked;
+    const wasLocked = useLeagueStore.getState().matches.find((m) => m.id === "m14")!.locked;
 
-    useLeagueStore.getState().toggleMatchLock("m5");
+    useLeagueStore.getState().toggleMatchLock("m14");
 
     const state = useLeagueStore.getState();
-    expect(state.matches.find((m) => m.id === "m5")!.locked).toBe(!wasLocked);
+    expect(state.matches.find((m) => m.id === "m14")!.locked).toBe(!wasLocked);
     expect(state.auditLog.length).toBe(before + 1);
     expect(state.auditLog[0].action).toBe("lock_match");
   });

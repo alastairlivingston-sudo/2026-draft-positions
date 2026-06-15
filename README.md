@@ -62,9 +62,9 @@ has a working default:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADMIN_PASSWORD` | `worldcup2026` | Password for `/league/world-cup-draft/admin`. |
-| `NEXT_PUBLIC_USE_MOCK_DATA` | `true` | Set to `false` to use the API-Football provider instead of mock live events. |
-| `API_FOOTBALL_KEY` | _(none)_ | API key for [API-Football](https://www.api-football.com/), used server-side by `src/app/api/live/route.ts`. |
-| `LIVE_DATA_CACHE_SECONDS` | `3600` | How long `/api/live` caches the upstream provider response, shared across all clients. Keeps API-Football usage to ~24/(hours) requests/day regardless of how many browsers are open. |
+| `NEXT_PUBLIC_USE_MOCK_DATA` | `true` | Set to `false` to pull live scores/events from ESPN's free public API instead of the scripted mock data. |
+| `API_FOOTBALL_KEY` | _(none)_ | Optional legacy provider ([API-Football](https://www.api-football.com/)) - if set alongside `NEXT_PUBLIC_USE_MOCK_DATA=false`, used instead of the default ESPN provider. Its free tier doesn't cover the 2026 World Cup. |
+| `LIVE_DATA_CACHE_SECONDS` | `3600` | How long `/api/live` caches the upstream provider response, shared across all clients, so the live provider is only hit once per cache window regardless of how many browsers are open. |
 | `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | How often the browser polls `/api/live`, in ms. Only affects UI freshness - the upstream call is cached per `LIVE_DATA_CACHE_SECONDS` above. |
 | `NEXT_PUBLIC_SUPABASE_URL` | _(none)_ | For a future Supabase-backed store (see `supabase/schema.sql`). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | _(none)_ | Same as above. |
@@ -94,8 +94,9 @@ src/
     selectors.ts              # derived state (leaderboard, feeds, etc.)
     store/league-store.ts     # Zustand store + admin actions + audit log
     data/seed.ts              # seed managers, squads, matches, events
-    data/api-football-mapping.ts  # fixture/player ID map for live API mode
-    api/                       # mock + API-Football provider adapters
+    data/espn-fixture-map.ts  # SEED_MATCHES id -> ESPN event id mapping
+    data/api-football-mapping.ts  # legacy fixture/player ID map for API-Football mode
+    api/                       # mock, ESPN and API-Football provider adapters
     hooks/use-live-polling.ts  # polls match status + live events
     auth.ts                    # admin password/session helpers
 supabase/schema.sql          # Supabase schema for a future backend
@@ -147,18 +148,25 @@ On each response:
    `ingestApiEvents`, which dedupes on `fixtureId:assetId:minute:type:detail`.
 
 - **Mock mode (default)**: `src/lib/api/mock-provider.ts` reveals a
-  scripted set of events for the live match (`m4`, Spain vs Ivory
-  Coast) over time, so you can see the leaderboard update live.
-- **API-Football mode**: set `NEXT_PUBLIC_USE_MOCK_DATA=false` and
-  `API_FOOTBALL_KEY` (server-side env vars only - never expose this key
-  to the browser). `src/lib/api/api-football-provider.ts` calls
+  scripted set of events for the live match (`m13`, Spain vs Cape
+  Verde) over time, so you can see the leaderboard update live.
+- **ESPN mode**: set `NEXT_PUBLIC_USE_MOCK_DATA=false`. No API key
+  needed. `src/lib/api/espn-provider.ts` pulls real scores/events from
+  ESPN's free public scoreboard for the fixtures listed in
+  `src/lib/data/espn-fixture-map.ts` (currently Group Stage · Matchday
+  1, `m1`-`m22`). Goals, assists, cards and own goals for squad players
+  are matched by name against ESPN's `keyEvents` feed - no per-player ID
+  mapping needed. Penalty saves aren't reported as a distinct event and
+  still need to be logged manually from the admin dashboard.
+- **API-Football mode (legacy)**: set `NEXT_PUBLIC_USE_MOCK_DATA=false`
+  and `API_FOOTBALL_KEY` (server-side env vars only - never expose this
+  key to the browser). `src/lib/api/api-football-provider.ts` calls
   API-Football's `/fixtures` and `/fixtures/events` endpoints for the
   fixtures/players listed in `src/lib/data/api-football-mapping.ts` -
   fill that file in with your World Cup 2026 fixture IDs and your
   squads' player IDs (instructions are in the file's header comment).
-  Until it has entries, the app behaves as if running in mock mode.
-  Note: penalty saves aren't reported as a distinct API-Football event
-  and still need to be logged manually from the admin dashboard.
+  Note: API-Football's free tier doesn't cover the 2026 World Cup at
+  all, so this mode only works on a paid plan.
 
 ## Testing
 
@@ -197,21 +205,23 @@ leaderboard page all point at that URL.
 - **Admin auth is a single shared password**, not per-user accounts.
   `src/lib/auth.ts` is structured so it can be swapped for Supabase
   Auth + a role check without changing call sites.
-- **API-Football integration needs ID mapping.** The provider is fully
-  implemented (`src/lib/api/api-football-provider.ts`), but
-  `src/lib/data/api-football-mapping.ts` ships empty - fixtures and
-  players won't resolve until you fill in those IDs. Penalty saves
-  also have no API event and need manual entry either way.
-- **Free-tier rate limits are tight.** API-Football's free plan allows
-  100 requests/day; `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` should be set
-  high enough (e.g. 10 min) to stay under that across a full match day.
+- **ESPN live data covers Group Stage · Matchday 1 only.**
+  `src/lib/data/espn-fixture-map.ts` maps `m1`-`m22` to ESPN's event
+  IDs; add entries there (and to `SEED_MATCHES`) for later matchdays as
+  they're played. Penalty saves have no API event and need manual entry
+  either way.
+- **API-Football integration (legacy) needs ID mapping and a paid
+  plan.** The provider is fully implemented
+  (`src/lib/api/api-football-provider.ts`), but
+  `src/lib/data/api-football-mapping.ts` ships empty, and its free tier
+  doesn't cover the 2026 World Cup regardless.
 
 ## Suggested next improvements
 
 - Wire up `supabase/schema.sql` and replace the Zustand store with
   Supabase reads + server actions, so all viewers share live state.
-- Fill in `src/lib/data/api-football-mapping.ts` with real fixture and
-  player IDs for your league's squads.
+- Extend `src/lib/data/espn-fixture-map.ts` and `SEED_MATCHES` for
+  Matchday 2+ as fixtures are confirmed.
 - Add Supabase Auth for admin login and per-action audit identities.
 - Add push notifications / toasts for live scoring events.
 - Add a draft/squad-editing flow for future seasons.

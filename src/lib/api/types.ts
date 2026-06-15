@@ -2,10 +2,14 @@ import type { Match, RawApiEvent } from "@/lib/types";
 
 /**
  * Adapter contract for a sports-data provider. Implementations:
- * - MockProvider: deterministic, in-memory data so the app works with
+ * - mockProvider: deterministic, in-memory data so the app works with
  *   zero configuration.
- * - ApiFootballProvider: stub for https://www.api-football.com/, wired
- *   up using API_FOOTBALL_KEY.
+ * - EspnProvider: pulls live scores/events from ESPN's free public
+ *   scoreboard API - no key required. The default once mock mode is
+ *   turned off.
+ * - ApiFootballProvider: legacy provider for
+ *   https://www.api-football.com/, wired up using API_FOOTBALL_KEY.
+ *   Its free tier doesn't cover the 2026 World Cup.
  */
 export interface ApiProvider {
   /** Fetches the latest state (status/score/minute) for tracked matches. */

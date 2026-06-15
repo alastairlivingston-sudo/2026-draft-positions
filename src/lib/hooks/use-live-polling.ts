@@ -22,8 +22,8 @@ interface LiveDataResponse {
  *
  * `/api/live` caches the upstream provider response for
  * `LIVE_DATA_CACHE_SECONDS` (default 1 hour) and shares it across all
- * clients, so polling here doesn't multiply API-Football usage by the
- * number of open browser tabs.
+ * clients, so polling here doesn't multiply the live provider's usage
+ * by the number of open browser tabs.
  *
  * Returns the current poll status (last update time, in-flight state,
  * data source) plus a `refresh` function for an on-demand poll.

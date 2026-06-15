@@ -38,6 +38,14 @@ export const COUNTRY_CODES: Record<string, string> = {
   Morocco: "MA",
   Panama: "PA",
   "South Africa": "ZA",
+  Czechia: "CZ",
+  "Bosnia-Herzegovina": "BA",
+  Paraguay: "PY",
+  Türkiye: "TR",
+  Sweden: "SE",
+  Egypt: "EG",
+  "New Zealand": "NZ",
+  Iraq: "IQ",
 };
 
 export function countryCode(country: string): string {

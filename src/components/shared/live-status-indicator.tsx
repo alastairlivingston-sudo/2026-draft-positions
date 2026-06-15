@@ -33,7 +33,7 @@ export function LiveStatusIndicator({ className }: LiveStatusIndicatorProps) {
       type="button"
       onClick={refresh}
       disabled={isFetching}
-      title={source === "mock" ? "Showing demo data · tap to refresh" : "Live data from API-Football · tap to refresh"}
+      title={source === "mock" ? "Showing demo data · tap to refresh" : "Live data from ESPN · tap to refresh"}
       className={cn(
         "flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60",
         className,
