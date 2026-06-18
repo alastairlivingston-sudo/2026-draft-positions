@@ -17,9 +17,11 @@ interface LiveDataResponse {
 }
 
 /**
- * Polls `/api/live` for match status/score updates and, while any
- * match is live, new fantasy events - ingesting both into the store.
- * New events are deduped via `ingestApiEvents`.
+ * Polls `/api/live` for match status/score updates and new fantasy
+ * events for any live or completed match - ingesting both into the
+ * store. New events are deduped via `ingestApiEvents`, so re-fetching
+ * events for already-completed matches (a deliberate backfill against
+ * missed live windows, see EspnProvider.getLiveEvents) never double-counts.
  *
  * `/api/live` caches the upstream provider response for
  * `LIVE_DATA_CACHE_SECONDS` (default 1 hour) and shares it across all

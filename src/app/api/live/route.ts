@@ -9,8 +9,14 @@ const getLiveData = unstable_cache(
   async () => {
     const provider = getApiProvider();
     const matches = await provider.getMatches();
-    const liveMatches = matches.filter((m) => m.status === "live");
-    const events = liveMatches.length > 0 ? await provider.getLiveEvents(liveMatches) : [];
+    // Pass live AND completed matches: a match's goal/assist/card events
+    // are only ever fetched here, and only while we ask for them. If we
+    // only asked while "live", any match whose live window was missed
+    // (e.g. it started and finished within one cache window, see
+    // LIVE_DATA_CACHE_SECONDS below) would permanently lose those events.
+    // EspnProvider.getLiveEvents dedupes safely against re-processing.
+    const eventMatches = matches.filter((m) => m.status === "live" || m.status === "completed");
+    const events = eventMatches.length > 0 ? await provider.getLiveEvents(eventMatches) : [];
     const nonAppearingAssetIds = (await provider.getNonAppearingAssetIds?.(matches)) ?? [];
     return { matches, events, nonAppearingAssetIds, fetchedAt: new Date().toISOString() };
   },

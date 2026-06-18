@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   discoverDynamicMatches,
+  EspnProvider,
   findNonAppearingCleanSheetAssetIds,
   resolveSquadCountry,
   type EspnEvent,
@@ -217,5 +218,59 @@ describe("findNonAppearingCleanSheetAssetIds", () => {
     ]);
 
     expect(findNonAppearingCleanSheetAssetIds(json, homeConceded)).toEqual([]);
+  });
+});
+
+describe("EspnProvider.getLiveEvents", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // m22: Ghana vs Panama - Mohammed Kudus (saul-5) scores, assisted by
+  // Jordan Ayew (jamie-1). Regression test for a bug where a match that
+  // went straight from "live" to "completed" between polls (e.g. its
+  // entire live window fell inside one /api/live cache window) never had
+  // its goal/assist key-events fetched at all, silently dropping the
+  // points - only the final-score-derived bonuses still landed.
+  const m22 = SEED_MATCHES.find((m) => m.id === "m22")!;
+  const summary: EspnSummaryResponse = {
+    keyEvents: [
+      {
+        type: { type: "goal" },
+        text: "Mohammed Kudus scores",
+        clock: { displayValue: "34'" },
+        participants: [{ athlete: { displayName: "Mohammed Kudus" } }, { athlete: { displayName: "Jordan Ayew" } }],
+      },
+    ],
+  };
+
+  function stubFetchWithSummary() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => summary }) as unknown as Response),
+    );
+  }
+
+  it("fetches and returns events for a completed match, not just a live one", async () => {
+    stubFetchWithSummary();
+    const completed: Match = { ...m22, status: "completed", homeScore: 1, awayScore: 0, minute: 90 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      { fixtureId: "m22", assetId: "saul-5", type: "goal", minute: 34, detail: "Mohammed Kudus scores" },
+      { fixtureId: "m22", assetId: "jamie-1", type: "assist", minute: 34, detail: "Mohammed Kudus scores" },
+    ]);
+  });
+
+  it("does not fetch events for a match that hasn't started", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const upcoming: Match = { ...m22, status: "upcoming", homeScore: null, awayScore: null, minute: null };
+
+    const events = await new EspnProvider().getLiveEvents([upcoming]);
+
+    expect(events).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

@@ -309,7 +309,9 @@ export function findNonAppearingCleanSheetAssetIds(json: EspnSummaryResponse, ma
  *
  * Coverage notes:
  * - Goals, assists, yellow/red cards and own goals are derived from each
- *   live fixture's keyEvents feed, matched to squad players by name.
+ *   live or completed fixture's keyEvents feed, matched to squad players
+ *   by name. Completed matches are re-checked (not just live ones) so a
+ *   match whose live window was missed entirely still gets backfilled.
  * - Penalty saves aren't reported as a distinct event and still need to
  *   be logged manually from the admin dashboard.
  * - Clean sheets and team win/loss/3+ bonuses need no player/team mapping
@@ -351,11 +353,23 @@ export class EspnProvider implements ApiProvider {
   }
 
   async getLiveEvents(matches: Match[]): Promise<RawApiEvent[]> {
-    const liveMatches = matches.filter((m) => m.status === "live" && resolveEspnId(m.id) !== undefined);
-    if (liveMatches.length === 0) return [];
+    // Includes "completed" matches, not just "live" ones: if a match's
+    // entire live window falls inside a single /api/live cache window (see
+    // LIVE_DATA_CACHE_SECONDS in src/app/api/live/route.ts), or nobody
+    // polls while it's live, its goal/assist/card key-events would
+    // otherwise never be fetched - only the final-score-derived bonuses
+    // (clean sheet, team result, computed locally in
+    // computeMatchResultEvents) would land, silently dropping individual
+    // player events. Re-fetching for already-processed completed matches
+    // is safe and cheap: ingestApiEvents dedupes by event hash, so this
+    // is purely a self-healing backfill, not a source of double-counting.
+    const relevantMatches = matches.filter(
+      (m) => (m.status === "live" || m.status === "completed") && resolveEspnId(m.id) !== undefined,
+    );
+    if (relevantMatches.length === 0) return [];
 
     const perMatch = await Promise.all(
-      liveMatches.map(async (match) => {
+      relevantMatches.map(async (match) => {
         const espnId = resolveEspnId(match.id);
         const res = await fetch(`${BASE_URL}/summary?event=${espnId}`, { cache: "no-store" });
         if (!res.ok) return [];

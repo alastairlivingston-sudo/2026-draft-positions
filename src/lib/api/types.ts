@@ -17,8 +17,11 @@ export interface ApiProvider {
 
   /**
    * Fetches new fantasy-relevant events (goals, cards, etc.) for matches
-   * that are currently live. Callers should dedupe using the event hash
-   * (fixtureId + assetId + minute + type + detail) before persisting.
+   * that are live or completed - completed matches are included so a
+   * match whose entire live window was missed (e.g. it started and
+   * finished within one cache window) still gets its events backfilled.
+   * Callers should dedupe using the event hash (fixtureId + assetId +
+   * minute + type + detail) before persisting.
    */
   getLiveEvents(matches: Match[]): Promise<RawApiEvent[]>;
 
