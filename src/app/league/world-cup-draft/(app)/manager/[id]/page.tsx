@@ -141,6 +141,7 @@ export default function ManagerSquadPage() {
                       <EventFeedItem
                         key={entry.id}
                         entry={entry}
+                        asset={selectedAsset}
                         linkToManager={false}
                         matchLabel={match ? `${match.homeTeam} vs ${match.awayTeam}` : undefined}
                       />
