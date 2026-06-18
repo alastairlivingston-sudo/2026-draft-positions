@@ -565,11 +565,22 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 2,
       migrate: (persistedState, version) => {
-        const state = persistedState as LeagueData & { apiEventCache: string[] };
+        let state = persistedState as LeagueData & { apiEventCache: string[] };
         if (version < 1) {
-          return { ...state, fantasyEvents: dedupeFantasyEvents(state.fantasyEvents) };
+          state = { ...state, fantasyEvents: dedupeFantasyEvents(state.fantasyEvents) };
+        }
+        if (version < 2) {
+          const seedUnavailability = new Map(SEED_SQUAD_ASSETS.map((a) => [a.id, a.unavailable ?? false]));
+          state = {
+            ...state,
+            squadAssets: state.squadAssets.map((asset) =>
+              seedUnavailability.has(asset.id) && asset.unavailable === undefined
+                ? { ...asset, unavailable: seedUnavailability.get(asset.id) }
+                : asset,
+            ),
+          };
         }
         return state;
       },

@@ -25,6 +25,8 @@ interface SeedAssetInput {
   country: string;
   position: Position;
   assetType?: "player" | "team";
+  /** Player was not named in their country's official 2026 World Cup squad (omission, injury, retirement). */
+  unavailable?: boolean;
 }
 
 const SQUADS: Record<string, SeedAssetInput[]> = {
@@ -52,8 +54,8 @@ const SQUADS: Record<string, SeedAssetInput[]> = {
     { name: "Nicolas Jackson", country: "Senegal", position: "Striker" },
     { name: "Tim Ream", country: "USA", position: "Defender" },
     { name: "Noor Al-Rawabdeh", country: "Jordan", position: "Midfielder" },
-    { name: "Kamal Miller", country: "Canada", position: "Defender" },
-    { name: "Mohammed Kudus", country: "Ghana", position: "Midfielder" },
+    { name: "Kamal Miller", country: "Canada", position: "Defender", unavailable: true },
+    { name: "Mohammed Kudus", country: "Ghana", position: "Midfielder", unavailable: true },
     { name: "Alexis Saelemaekers", country: "Belgium", position: "Midfielder" },
     { name: "Alisson", country: "Brazil", position: "Goalkeeper" },
     { name: "Marian Alshafi", country: "Saudi Arabia", position: "Midfielder" },
@@ -70,9 +72,9 @@ const SQUADS: Record<string, SeedAssetInput[]> = {
   ],
   lev: [
     { name: "Kai Havertz", country: "Germany", position: "Striker" },
-    { name: "Franco Mastantuono", country: "Argentina", position: "Midfielder" },
+    { name: "Franco Mastantuono", country: "Argentina", position: "Midfielder", unavailable: true },
     { name: "Mehdi Taremi", country: "Iran", position: "Striker" },
-    { name: "Nathan Nandez", country: "Uruguay", position: "Midfielder" },
+    { name: "Nathan Nandez", country: "Uruguay", position: "Midfielder", unavailable: true },
     { name: "Amine Gouiri", country: "Algeria", position: "Striker" },
     { name: "Josko Gvardiol", country: "Croatia", position: "Defender" },
     { name: "Holland", country: "Netherlands", position: "Team", assetType: "team" },
@@ -86,24 +88,24 @@ const SQUADS: Record<string, SeedAssetInput[]> = {
     { name: "Federico Valverde", country: "Uruguay", position: "Midfielder" },
     { name: "Garry Rodrigues", country: "Cape Verde", position: "Midfielder" },
     { name: "Yehvann Diouf", country: "Senegal", position: "Goalkeeper" },
-    { name: "Jean-Philippe Gbamin", country: "Ivory Coast", position: "Midfielder" },
+    { name: "Jean-Philippe Gbamin", country: "Ivory Coast", position: "Midfielder", unavailable: true },
   ],
   josh: [
     { name: "Ricardo Rodriguez", country: "Switzerland", position: "Defender" },
     { name: "Declan Rice", country: "England", position: "Midfielder" },
     { name: "Ghislain Konan", country: "Ivory Coast", position: "Defender" },
-    { name: "Eliesse Ben Seghir", country: "Morocco", position: "Midfielder" },
+    { name: "Eliesse Ben Seghir", country: "Morocco", position: "Midfielder", unavailable: true },
     { name: "Jules Kounde", country: "France", position: "Defender" },
-    { name: "Joe Gauci", country: "Australia", position: "Goalkeeper" },
+    { name: "Joe Gauci", country: "Australia", position: "Goalkeeper", unavailable: true },
     { name: "Carlos Harvey", country: "Panama", position: "Midfielder" },
     { name: "South Africa", country: "South Africa", position: "Team", assetType: "team" },
   ],
   sanford: [
     { name: "Mohammad Abu Zrayq", country: "Jordan", position: "Striker" },
-    { name: "Erick Sanchez", country: "Mexico", position: "Midfielder" },
+    { name: "Erick Sanchez", country: "Mexico", position: "Midfielder", unavailable: true },
     { name: "Alexander Sorloth", country: "Norway", position: "Striker" },
     { name: "Inbeom Hwang", country: "Korea", position: "Midfielder" },
-    { name: "Naim Sliti", country: "Tunisia", position: "Striker" },
+    { name: "Naim Sliti", country: "Tunisia", position: "Striker", unavailable: true },
     { name: "Jurien Gaari", country: "Curacao", position: "Defender" },
     { name: "Denzel Dumfries", country: "Netherlands", position: "Defender" },
     { name: "Christoph Baumgartner", country: "Austria", position: "Midfielder" },
@@ -120,6 +122,7 @@ export const SEED_SQUAD_ASSETS: SquadAsset[] = Object.entries(SQUADS).flatMap(([
     countryCode: countryCode(asset.country),
     position: asset.position,
     assetType: asset.assetType ?? "player",
+    unavailable: asset.unavailable ?? false,
   })),
 );
 
