@@ -123,6 +123,32 @@ function pushAudit(
   return [full, ...log];
 }
 
+/**
+ * Collapses fantasyEvents that represent the same real-world event under
+ * the (matchId, assetId, type, minute) key (see ingestApiEvents), keeping
+ * the earliest-recorded one. One-time cleanup for browsers whose persisted
+ * state already has duplicates from before that dedup check existed (e.g.
+ * a curated seed goal re-ingested from a live API re-fetch) - ingestApiEvents
+ * itself prevents new duplicates going forward.
+ */
+export function dedupeFantasyEvents(events: FantasyEvent[]): FantasyEvent[] {
+  const bestByKey = new Map<string, FantasyEvent>();
+  for (const event of events) {
+    // Only events tied to a real match can collide this way - freeform
+    // manual events (matchId: null) are intentionally never deduped, since
+    // an admin may add several distinct ones for the same asset/type with
+    // no minute to disambiguate them.
+    if (event.matchId === null) continue;
+    const key = `${event.matchId}:${event.assetId}:${event.type}:${event.minute}`;
+    const existing = bestByKey.get(key);
+    if (!existing || new Date(event.createdAt).getTime() < new Date(existing.createdAt).getTime()) {
+      bestByKey.set(key, event);
+    }
+  }
+  const kept = new Set(bestByKey.values());
+  return events.filter((event) => event.matchId === null || kept.has(event));
+}
+
 const initialState: LeagueData & { apiEventCache: string[] } = {
   managers: SEED_MANAGERS,
   squadAssets: SEED_SQUAD_ASSETS,
@@ -539,6 +565,14 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persistedState, version) => {
+        const state = persistedState as LeagueData & { apiEventCache: string[] };
+        if (version < 1) {
+          return { ...state, fantasyEvents: dedupeFantasyEvents(state.fantasyEvents) };
+        }
+        return state;
+      },
     },
   ),
 );

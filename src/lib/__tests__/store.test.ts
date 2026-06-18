@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getAssetPoints, getManagerTotal } from "@/lib/selectors";
-import { useLeagueStore } from "@/lib/store/league-store";
+import { dedupeFantasyEvents, useLeagueStore } from "@/lib/store/league-store";
+import type { FantasyEvent } from "@/lib/types";
 
 beforeEach(() => {
   useLeagueStore.getState().resetToSeed();
@@ -63,6 +64,53 @@ describe("ingestApiEvents", () => {
 
     expect(count).toBe(1);
     expect(useLeagueStore.getState().fantasyEvents.length).toBe(before + 1);
+  });
+});
+
+describe("dedupeFantasyEvents", () => {
+  function makeEvent(overrides: Partial<FantasyEvent> & { id: string }): FantasyEvent {
+    return {
+      matchId: "m9",
+      assetId: "lev-1",
+      managerId: "lev",
+      type: "goal",
+      points: 4,
+      minute: 45,
+      detail: "",
+      createdAt: "2026-06-14T17:52:00Z",
+      source: "seed",
+      eventHash: null,
+      ...overrides,
+    };
+  }
+
+  it("collapses a seed event and its later API-sourced duplicate, keeping the earlier one", () => {
+    // Mirrors the persisted-state bug: evt-9 (seed) and a same-minute
+    // re-fetch from ESPN both ended up in fantasyEvents before the
+    // ingestApiEvents dedup fix landed.
+    const seedEvent = makeEvent({ id: "evt-9", createdAt: "2026-06-14T17:52:00Z", source: "seed" });
+    const duplicateApiEvent = makeEvent({
+      id: "evt-dup",
+      createdAt: "2026-06-18T09:12:00Z",
+      source: "api",
+      detail: "Goal! Germany 3, Curacao 1. Kai Havertz (Germany) converts a penalty.",
+    });
+
+    expect(dedupeFantasyEvents([seedEvent, duplicateApiEvent])).toEqual([seedEvent]);
+  });
+
+  it("keeps two real goals by the same player in the same match at different minutes", () => {
+    const first = makeEvent({ id: "evt-9", minute: 45 });
+    const second = makeEvent({ id: "evt-10", minute: 88 });
+
+    expect(dedupeFantasyEvents([first, second])).toEqual([first, second]);
+  });
+
+  it("never collapses freeform manual events with no matchId", () => {
+    const first = makeEvent({ id: "evt-a", matchId: null, minute: null, type: "manual_adjustment" });
+    const second = makeEvent({ id: "evt-b", matchId: null, minute: null, type: "manual_adjustment" });
+
+    expect(dedupeFantasyEvents([first, second])).toEqual([first, second]);
   });
 });
 
