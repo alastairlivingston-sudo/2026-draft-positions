@@ -26,6 +26,8 @@ export interface SquadAsset {
   countryCode: string;
   position: Position;
   assetType: AssetType;
+  /** Manually flagged by an admin as unavailable (injury, squad omission, etc). */
+  unavailable?: boolean;
 }
 
 export type MatchStatus = "upcoming" | "live" | "completed";

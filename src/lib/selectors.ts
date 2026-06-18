@@ -125,6 +125,39 @@ export function getRemainingAssetsCount(data: LeagueData, managerId: string): nu
   return getManagerAssets(data, managerId).filter((asset) => isAssetStillToPlay(data, asset)).length;
 }
 
+function getCountryMatches(data: LeagueData, country: string): Match[] {
+  return data.matches.filter((m) => m.homeTeam === country || m.awayTeam === country);
+}
+
+/** Number of upcoming/live matches remaining for a country. */
+export function getRemainingMatchCount(data: LeagueData, country: string): number {
+  return getCountryMatches(data, country).filter((m) => m.status === "upcoming" || m.status === "live").length;
+}
+
+/**
+ * Best-effort "out of the tournament" signal: true once a country has no
+ * upcoming/live matches left and didn't win its most recent completed one.
+ * Can false-positive for a team that drew/lost a final group game but still
+ * advances on group standings (e.g. as a best third-placed team) until
+ * their next fixture is discovered - intended as a soft visual cue, not an
+ * authoritative result.
+ */
+export function isTeamPresumedEliminated(data: LeagueData, country: string): boolean {
+  const matches = getCountryMatches(data, country);
+  if (matches.length === 0) return false;
+  if (matches.some((m) => m.status === "upcoming" || m.status === "live")) return false;
+
+  const last = matches
+    .filter((m) => m.status === "completed" && m.homeScore !== null && m.awayScore !== null)
+    .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime())[0];
+  if (!last) return false;
+
+  const isHome = last.homeTeam === country;
+  const teamScore = isHome ? last.homeScore! : last.awayScore!;
+  const oppScore = isHome ? last.awayScore! : last.homeScore!;
+  return teamScore <= oppScore;
+}
+
 /** Squad assets (with their manager) whose country is involved in a given match. */
 export function getMatchAssets(data: LeagueData, match: Match): { asset: SquadAsset; manager: Manager }[] {
   return data.squadAssets

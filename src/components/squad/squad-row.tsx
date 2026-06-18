@@ -11,14 +11,27 @@ interface SquadRowProps {
   points: number;
   eventCount: number;
   stillToPlay: boolean;
+  remainingGames: number;
+  eliminated?: boolean;
   onClick?: () => void;
 }
 
-export function SquadRow({ asset, points, eventCount, stillToPlay, onClick }: SquadRowProps) {
+export function SquadRow({
+  asset,
+  points,
+  eventCount,
+  stillToPlay,
+  remainingGames,
+  eliminated = false,
+  onClick,
+}: SquadRowProps) {
   return (
     <button
       onClick={onClick}
-      className="flex h-[72px] w-full items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 text-left transition-colors hover:border-primary/30 active:scale-[0.99]"
+      className={cn(
+        "flex h-[72px] w-full items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 text-left transition-colors hover:border-primary/30 active:scale-[0.99]",
+        eliminated && "opacity-50 grayscale",
+      )}
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-lg">
         <CountryFlag countryCode={asset.countryCode} />
@@ -29,6 +42,11 @@ export function SquadRow({ asset, points, eventCount, stillToPlay, onClick }: Sq
         <div className="flex items-center gap-2">
           <PositionChip position={asset.position} />
           <span className="truncate text-xs text-muted-foreground">{asset.country}</span>
+          {asset.unavailable && (
+            <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
+              Unavailable
+            </span>
+          )}
           {stillToPlay && (
             <>
               <span
@@ -41,7 +59,7 @@ export function SquadRow({ asset, points, eventCount, stillToPlay, onClick }: Sq
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-400" />
               </span>
               <span className="hidden rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-bold text-sky-300 sm:inline">
-                Still to play
+                {remainingGames} {remainingGames === 1 ? "game" : "games"} left
               </span>
             </>
           )}

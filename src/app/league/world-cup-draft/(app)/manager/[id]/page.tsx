@@ -17,7 +17,9 @@ import {
   getAssetPoints,
   getEventFeed,
   getManagerAssets,
+  getRemainingMatchCount,
   isAssetStillToPlay,
+  isTeamPresumedEliminated,
 } from "@/lib/selectors";
 import { PositionChip } from "@/components/shared/position-chip";
 import { SquadRow } from "@/components/squad/squad-row";
@@ -96,6 +98,8 @@ export default function ManagerSquadPage() {
                 points={points}
                 eventCount={eventCount}
                 stillToPlay={isAssetStillToPlay(data, asset)}
+                remainingGames={getRemainingMatchCount(data, asset.country)}
+                eliminated={isTeamPresumedEliminated(data, asset.country)}
                 onClick={() => setSelectedAssetId(asset.id)}
               />
             );

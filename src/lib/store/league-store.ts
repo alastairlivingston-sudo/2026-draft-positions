@@ -86,10 +86,10 @@ export interface LeagueStore extends LeagueData {
     actor?: string,
   ) => void;
 
-  /** Edits a squad asset's mapping (name, country, position, asset type) from the Mapping tab. */
+  /** Edits a squad asset's mapping (name, country, position, asset type, availability) from the Mapping tab. */
   updateSquadAsset: (
     id: string,
-    patch: Partial<Pick<SquadAsset, "name" | "country" | "position" | "assetType">>,
+    patch: Partial<Pick<SquadAsset, "name" | "country" | "position" | "assetType" | "unavailable">>,
     actor?: string,
   ) => void;
 

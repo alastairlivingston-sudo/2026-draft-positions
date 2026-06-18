@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { COUNTRY_CODES } from "@/lib/countries";
 import { getManagerAssets } from "@/lib/selectors";
 import { useLeagueStore } from "@/lib/store/league-store";
@@ -85,6 +86,15 @@ function AssetRow({ asset }: { asset: SquadAsset }) {
         </span>
       </div>
       <PositionChip position={asset.position} />
+
+      <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        Unavailable
+        <Switch
+          size="sm"
+          checked={!!asset.unavailable}
+          onCheckedChange={(checked) => updateSquadAsset(asset.id, { unavailable: checked })}
+        />
+      </label>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Edit mapping" />}>
