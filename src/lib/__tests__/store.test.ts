@@ -27,6 +27,43 @@ describe("ingestApiEvents", () => {
     expect(secondCount).toBe(0);
     expect(useLeagueStore.getState().fantasyEvents.length).toBe(before + 1);
   });
+
+  it("ignores an API event that duplicates an existing seed event for the same match/asset/type/minute, even with different wording", () => {
+    // evt-9 in SEED_FANTASY_EVENTS: lev-1 (Kai Havertz) scored at minute 45 in
+    // m9 with detail "Converts a penalty to make it 3-1". A re-fetch of the
+    // same real-world goal from ESPN's keyEvents feed (different `detail`
+    // text, source "api" instead of "seed") must not be double-counted -
+    // regression test for the Havertz brace showing as four goals instead
+    // of two.
+    const seedEvent = useLeagueStore
+      .getState()
+      .fantasyEvents.find((e) => e.matchId === "m9" && e.assetId === "lev-1" && e.minute === 45)!;
+    expect(seedEvent.source).toBe("seed");
+    expect(seedEvent.eventHash).toBeNull();
+
+    const before = useLeagueStore.getState().fantasyEvents.length;
+
+    const count = useLeagueStore.getState().ingestApiEvents(
+      [{ fixtureId: "m9", assetId: "lev-1", type: "goal", minute: 45, detail: "Kai Havertz converts the penalty" }],
+      "api",
+    );
+
+    expect(count).toBe(0);
+    expect(useLeagueStore.getState().fantasyEvents.length).toBe(before);
+  });
+
+  it("still records a second real goal by the same player in the same match at a different minute", () => {
+    // evt-10: lev-1's second goal in m9, at minute 88.
+    const before = useLeagueStore.getState().fantasyEvents.length;
+
+    const count = useLeagueStore.getState().ingestApiEvents(
+      [{ fixtureId: "m9", assetId: "lev-1", type: "goal", minute: 12, detail: "An earlier, unrelated goal" }],
+      "api",
+    );
+
+    expect(count).toBe(1);
+    expect(useLeagueStore.getState().fantasyEvents.length).toBe(before + 1);
+  });
 });
 
 describe("addManualAdjustment", () => {

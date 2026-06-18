@@ -441,17 +441,32 @@ export const useLeagueStore = create<LeagueStore>()(
         const knownHashes = new Set(state.apiEventCache);
         const assetsById = new Map(state.squadAssets.map((a) => [a.id, a]));
 
+        // Catches the same real-world event arriving with different exact
+        // wording - e.g. a goal already recorded via curated SEED_FANTASY_EVENTS
+        // (source "seed", eventHash null, so it never registers in
+        // apiEventCache) re-appearing from ESPN's keyEvents feed with its own
+        // `detail` text. (matchId, assetId, type, minute) identifies a single
+        // real event - even a brace has two distinct minutes - without
+        // requiring the detail text to match verbatim.
+        const knownEventKeys = new Set(
+          state.fantasyEvents.map((e) => `${e.matchId}:${e.assetId}:${e.type}:${e.minute}`),
+        );
+
         const newEvents: FantasyEvent[] = [];
         const newHashes: string[] = [];
+        const newEventKeys = new Set<string>();
 
         for (const raw of events) {
           const hash = `${raw.fixtureId}:${raw.assetId}:${raw.minute}:${raw.type}:${raw.detail}`;
+          const eventKey = `${raw.fixtureId}:${raw.assetId}:${raw.type}:${raw.minute}`;
           if (knownHashes.has(hash) || newHashes.includes(hash)) continue;
+          if (knownEventKeys.has(eventKey) || newEventKeys.has(eventKey)) continue;
 
           const asset = assetsById.get(raw.assetId);
           if (!asset) continue;
 
           newHashes.push(hash);
+          newEventKeys.add(eventKey);
           newEvents.push({
             id: generateId("evt"),
             matchId: raw.fixtureId,
