@@ -130,10 +130,12 @@ export function buildEventHash(params: {
  * team conceded nothing in the whole match, so every qualifying
  * GK/Defender gets it, except those listed in `nonPlayingAssetIds`
  * (squad players who didn't appear in the match at all, per provider
- * roster data - see EspnProvider.getNonAppearingAssetIds). If a player
- * appeared but came off before 60 minutes, an admin should remove the
- * individual `clean_sheet` event from the Events tab to apply the rule
- * for that specific case.
+ * roster data - see EspnProvider.getNonAppearingAssetIds) or flagged
+ * `asset.unavailable` (not in their country's real World Cup squad at
+ * all, so absent from provider roster data too - admin-set via the
+ * Mapping tab). If a player appeared but came off before 60 minutes, an
+ * admin should remove the individual `clean_sheet` event from the
+ * Events tab to apply the rule for that specific case.
  */
 export function computeMatchResultEvents(
   match: Match,
@@ -165,6 +167,7 @@ export function computeMatchResultEvents(
       } else if (
         side.conceded === 0 &&
         CLEAN_SHEET_POSITIONS.includes(asset.position) &&
+        !asset.unavailable &&
         !nonPlayingAssetIds?.has(asset.id)
       ) {
         events.push({ fixtureId: match.id, assetId: asset.id, type: "clean_sheet", minute: 90, detail: `${side.team} keep a clean sheet` });

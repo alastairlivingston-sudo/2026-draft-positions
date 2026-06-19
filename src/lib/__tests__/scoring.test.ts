@@ -150,4 +150,10 @@ describe("computeMatchResultEvents", () => {
     const events = computeMatchResultEvents(baseMatch, squadAssets, new Set(["some-other-asset"]));
     expect(events.filter((e) => e.assetId === franceDefender.id).map((e) => e.type)).toEqual(["clean_sheet"]);
   });
+
+  it("does not award a clean sheet to a GK/Defender flagged unavailable, even with no nonPlayingAssetIds match", () => {
+    const omittedDefender: SquadAsset = { ...franceDefender, id: "asset-omitted-def", unavailable: true };
+    const events = computeMatchResultEvents(baseMatch, [...squadAssets, omittedDefender]);
+    expect(events.some((e) => e.assetId === omittedDefender.id)).toBe(false);
+  });
 });

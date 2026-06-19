@@ -444,7 +444,7 @@ export const useLeagueStore = create<LeagueStore>()(
         const manager = state.managers.find((m) => m.id === existing.managerId);
         const describeAsset = (a: SquadAsset) => `${a.name} (${a.country}, ${a.position}, ${a.assetType})`;
 
-        const auditLog = pushAudit(state.auditLog, {
+        let auditLog = pushAudit(state.auditLog, {
           action: "update_squad_asset" as AuditAction,
           actor,
           managerId: existing.managerId,
@@ -456,8 +456,34 @@ export const useLeagueStore = create<LeagueStore>()(
           reason: "Squad mapping corrected by admin",
         });
 
+        // Newly-flagged-unavailable players can't have actually kept a
+        // clean sheet - strip any already-recorded clean_sheet bonus for
+        // them (mirrors the Joe Gauci correction in the original seed
+        // data, generalized to the admin toggle).
+        let fantasyEvents = state.fantasyEvents;
+        if (patch.unavailable && !existing.unavailable) {
+          const stale = fantasyEvents.filter((e) => e.assetId === id && e.type === "clean_sheet");
+          if (stale.length > 0) {
+            fantasyEvents = fantasyEvents.filter((e) => !stale.includes(e));
+            for (const event of stale) {
+              auditLog = pushAudit(auditLog, {
+                action: "delete_event" as AuditAction,
+                actor,
+                managerId: existing.managerId,
+                managerName: manager?.name,
+                assetId: existing.id,
+                assetName: updated.name,
+                oldValue: `clean_sheet (${event.minute ?? "?"}', +${event.points} pts)`,
+                newValue: "deleted",
+                reason: `${updated.name} flagged unavailable - not actually in the squad, so earns no points`,
+              });
+            }
+          }
+        }
+
         set({
           squadAssets: state.squadAssets.map((a) => (a.id === id ? updated : a)),
+          fantasyEvents,
           auditLog,
         });
       },
@@ -565,7 +591,7 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: (persistedState, version) => {
         let state = persistedState as LeagueData & { apiEventCache: string[] };
         if (version < 1) {
@@ -579,6 +605,20 @@ export const useLeagueStore = create<LeagueStore>()(
               seedUnavailability.has(asset.id) && asset.unavailable === undefined
                 ? { ...asset, unavailable: seedUnavailability.get(asset.id) }
                 : asset,
+            ),
+          };
+        }
+        if (version < 3) {
+          // Players not actually in their country's squad (e.g. Kamal
+          // Miller, Joe Gauci) could still have a stale auto-awarded
+          // clean_sheet bonus from before the unavailable flag excluded
+          // them - the bug computeMatchResultEvents had before this
+          // version. Strip those now that the flag is reliably set.
+          const unavailableIds = new Set(state.squadAssets.filter((a) => a.unavailable).map((a) => a.id));
+          state = {
+            ...state,
+            fantasyEvents: state.fantasyEvents.filter(
+              (e) => !(unavailableIds.has(e.assetId) && e.type === "clean_sheet"),
             ),
           };
         }
