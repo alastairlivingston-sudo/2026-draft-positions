@@ -11,7 +11,7 @@ const DEFAULT_INTERVAL_MS = 60_000;
 interface LiveDataResponse {
   matches: Match[];
   events: RawApiEvent[];
-  nonAppearingAssetIds: string[];
+  nonAppearingAssetIds: Record<string, string[]>;
   source: "mock" | "api";
   fetchedAt: string;
 }

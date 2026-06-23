@@ -17,7 +17,7 @@ const getLiveData = unstable_cache(
     // EspnProvider.getLiveEvents dedupes safely against re-processing.
     const eventMatches = matches.filter((m) => m.status === "live" || m.status === "completed");
     const events = eventMatches.length > 0 ? await provider.getLiveEvents(eventMatches) : [];
-    const nonAppearingAssetIds = (await provider.getNonAppearingAssetIds?.(matches)) ?? [];
+    const nonAppearingAssetIds = (await provider.getNonAppearingAssetIds?.(matches)) ?? {};
     return { matches, events, nonAppearingAssetIds, fetchedAt: new Date().toISOString() };
   },
   ["live-data"],
@@ -43,7 +43,7 @@ export async function GET() {
     return NextResponse.json({
       matches: [],
       events: [],
-      nonAppearingAssetIds: [],
+      nonAppearingAssetIds: {},
       fetchedAt: new Date().toISOString(),
       source: isMockMode() ? "mock" : "api",
     });

@@ -27,10 +27,13 @@ export interface ApiProvider {
 
   /**
    * Optional: for completed matches where a clean sheet is possible,
-   * returns the squad GK/Defender asset ids that never appeared in the
-   * match at all (per provider roster data), so
-   * computeMatchResultEvents can skip their clean_sheet bonus. Only
-   * EspnProvider implements this - other providers have no roster data.
+   * returns - keyed by match id - the squad GK/Defender asset ids that
+   * never appeared in that match at all (per provider roster data), so
+   * computeMatchResultEvents can skip their clean_sheet bonus for that
+   * match specifically. Keyed per-match because a player can sit out one
+   * fixture (no clean sheet there) yet start and keep one in another -
+   * a flat, match-agnostic list would suppress the bonus everywhere.
+   * Only EspnProvider implements this - other providers have no roster data.
    */
-  getNonAppearingAssetIds?(matches: Match[]): Promise<string[]>;
+  getNonAppearingAssetIds?(matches: Match[]): Promise<Record<string, string[]>>;
 }

@@ -220,11 +220,37 @@ describe("syncMatches", () => {
 
     useLeagueStore
       .getState()
-      .syncMatches([{ ...before, status: "completed", homeScore: 0, awayScore: 0, minute: 90 }], ["sac-4"]);
+      .syncMatches([{ ...before, status: "completed", homeScore: 0, awayScore: 0, minute: 90 }], { m13: ["sac-4"] });
 
     const state = useLeagueStore.getState();
     const porroEvents = state.fantasyEvents.filter((e) => e.assetId === "sac-4" && e.matchId === "m13");
     expect(porroEvents.some((e) => e.type === "clean_sheet")).toBe(false);
+  });
+
+  it("scopes nonAppearing exclusions per match - a player absent in one still scores a clean sheet in another", () => {
+    // Porro (sac-4) did not appear in m13, but started and kept a clean
+    // sheet in m35 (Spain vs Saudi Arabia). The m13 exclusion must not
+    // leak into m35. Regression test for the global-set bug.
+    const m13 = useLeagueStore.getState().matches.find((m) => m.id === "m13")!;
+    const m35 = useLeagueStore.getState().matches.find((m) => m.id === "m35")!;
+
+    useLeagueStore.getState().syncMatches(
+      [
+        { ...m13, status: "completed", homeScore: 0, awayScore: 0, minute: 90 },
+        { ...m35, status: "completed", homeScore: 4, awayScore: 0, minute: 90 },
+      ],
+      { m13: ["sac-4"] },
+    );
+
+    const state = useLeagueStore.getState();
+    const m13Clean = state.fantasyEvents.some(
+      (e) => e.assetId === "sac-4" && e.matchId === "m13" && e.type === "clean_sheet",
+    );
+    const m35Clean = state.fantasyEvents.some(
+      (e) => e.assetId === "sac-4" && e.matchId === "m35" && e.type === "clean_sheet",
+    );
+    expect(m13Clean).toBe(false);
+    expect(m35Clean).toBe(true);
   });
 
   it("awards a clean sheet to a squad GK/Defender not in nonAppearingAssetIds", () => {

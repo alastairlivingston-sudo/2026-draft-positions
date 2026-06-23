@@ -148,9 +148,12 @@ On each response:
 3. `nonAppearingAssetIds` - for completed matches where a side kept a
    clean sheet, `EspnProvider.getNonAppearingAssetIds`
    (`src/lib/api/espn-provider.ts`) checks that side's ESPN roster and
-   lists squad GK/Defender asset ids who were neither a starter nor
-   subbed on, so `computeMatchResultEvents` doesn't award them a clean
-   sheet. Players who appeared but came off before 60 minutes aren't
+   returns, **keyed per match id**, the squad GK/Defender asset ids who
+   were neither a starter nor subbed on, so `computeMatchResultEvents`
+   skips their clean sheet for that match only. The per-match keying
+   matters: a defender can sit out one fixture (no clean sheet there) yet
+   start and keep one in another, so the exclusion must never leak across
+   matches. Players who appeared but came off before 60 minutes aren't
    covered by this check - an admin can remove their individual
    `clean_sheet` event from the Events tab if needed.
 

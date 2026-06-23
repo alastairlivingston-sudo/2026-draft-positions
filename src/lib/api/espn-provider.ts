@@ -382,7 +382,7 @@ export class EspnProvider implements ApiProvider {
     return perMatch.flat();
   }
 
-  async getNonAppearingAssetIds(matches: Match[]): Promise<string[]> {
+  async getNonAppearingAssetIds(matches: Match[]): Promise<Record<string, string[]>> {
     const candidates = matches.filter((m) => {
       if (m.status !== "completed" || m.homeScore === null || m.awayScore === null) return false;
       if (resolveEspnId(m.id) === undefined) return false;
@@ -390,19 +390,22 @@ export class EspnProvider implements ApiProvider {
       const awayKeptCleanSheet = m.homeScore === 0 && CLEAN_SHEET_COUNTRIES.has(m.awayTeam);
       return homeKeptCleanSheet || awayKeptCleanSheet;
     });
-    if (candidates.length === 0) return [];
+    if (candidates.length === 0) return {};
 
     const perMatch = await Promise.all(
-      candidates.map(async (match) => {
+      candidates.map(async (match): Promise<[string, string[]]> => {
         const espnId = resolveEspnId(match.id);
         const res = await fetch(`${BASE_URL}/summary?event=${espnId}`, { cache: "no-store" });
-        if (!res.ok) return [];
+        if (!res.ok) return [match.id, []];
 
         const json = (await res.json()) as EspnSummaryResponse;
-        return findNonAppearingCleanSheetAssetIds(json, match);
+        return [match.id, findNonAppearingCleanSheetAssetIds(json, match)];
       }),
     );
 
-    return perMatch.flat();
+    // Keyed per-match: a GK/Defender absent here may have started (and
+    // kept a clean sheet) in another fixture, so these exclusions must
+    // never leak across matches. Drop empty entries to keep it compact.
+    return Object.fromEntries(perMatch.filter(([, ids]) => ids.length > 0));
   }
 }
