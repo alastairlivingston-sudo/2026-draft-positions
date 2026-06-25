@@ -110,14 +110,17 @@ export interface LeagueStore extends LeagueData {
    * newly reported as "completed", also computes and ingests its
    * result-based events (clean sheets, team win/loss/3+ bonuses).
    *
-   * `nonAppearingAssetIds` (from EspnProvider.getNonAppearingAssetIds)
-   * maps each match id to the squad GK/Defender asset ids that didn't
-   * appear in that match at all, so they're excluded from the automatic
-   * clean_sheet bonus for that match only. Keyed per-match because a
-   * player can sit out one fixture yet start and keep a clean sheet in
-   * another - a flat list would wrongly suppress the bonus everywhere.
+   * `cleanSheetIneligibleAssetIds` (from
+   * EspnProvider.getCleanSheetIneligibleAssetIds) maps each match id to the
+   * squad GK/Defender asset ids that aren't eligible for the clean sheet
+   * bonus in that match - they either didn't appear at all, or were on the
+   * pitch for under the 60-minute threshold - so they're excluded from the
+   * automatic clean_sheet bonus for that match only. Keyed per-match
+   * because a player can sit out one fixture yet start and keep a clean
+   * sheet in another - a flat list would wrongly suppress the bonus
+   * everywhere.
    */
-  syncMatches: (apiMatches: Match[], nonAppearingAssetIds?: Record<string, string[]>) => void;
+  syncMatches: (apiMatches: Match[], cleanSheetIneligibleAssetIds?: Record<string, string[]>) => void;
 
   resetToSeed: () => void;
 }
@@ -556,15 +559,15 @@ export const useLeagueStore = create<LeagueStore>()(
         return newEvents.length;
       },
 
-      syncMatches: (apiMatches, nonAppearingAssetIds) => {
+      syncMatches: (apiMatches, cleanSheetIneligibleAssetIds) => {
         const state = get();
         const apiById = new Map(apiMatches.map((m) => [m.id, m]));
         const existingIds = new Set(state.matches.map((m) => m.id));
         // Per-match exclusion sets: a player who sat out one fixture must
         // not lose a clean sheet they kept in another, so look these up by
         // the specific match id rather than against one global set.
-        const nonPlayingByMatch = nonAppearingAssetIds ?? {};
-        const nonPlayingFor = (matchId: string) => new Set(nonPlayingByMatch[matchId] ?? []);
+        const ineligibleByMatch = cleanSheetIneligibleAssetIds ?? {};
+        const nonPlayingFor = (matchId: string) => new Set(ineligibleByMatch[matchId] ?? []);
 
         // Derive result events once per match: on the transition to
         // "completed", or as a one-time backfill for a match that was

@@ -11,7 +11,7 @@ const DEFAULT_INTERVAL_MS = 60_000;
 interface LiveDataResponse {
   matches: Match[];
   events: RawApiEvent[];
-  nonAppearingAssetIds: Record<string, string[]>;
+  cleanSheetIneligibleAssetIds: Record<string, string[]>;
   source: "mock" | "api";
   fetchedAt: string;
 }
@@ -49,7 +49,7 @@ export function useLivePolling(intervalMs?: number): LiveStatus {
       if (!res.ok) return;
       const data: LiveDataResponse = await res.json();
 
-      if (data.matches.length > 0) syncMatches(data.matches, data.nonAppearingAssetIds);
+      if (data.matches.length > 0) syncMatches(data.matches, data.cleanSheetIneligibleAssetIds);
       if (data.events.length > 0) ingestApiEvents(data.events, data.source);
 
       setSource(data.source);

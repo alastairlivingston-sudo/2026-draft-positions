@@ -1,7 +1,7 @@
 import { countryCode } from "@/lib/countries";
 import { ESPN_FIXTURE_ID_MAP, ESPN_SCOREBOARD_DATE_RANGE } from "@/lib/data/espn-fixture-map";
 import { SEED_MATCHES, SEED_SQUAD_ASSETS } from "@/lib/data/seed";
-import { CLEAN_SHEET_POSITIONS } from "@/lib/scoring";
+import { CLEAN_SHEET_MIN_MINUTES, CLEAN_SHEET_POSITIONS } from "@/lib/scoring";
 import type { FantasyEventType, Match, MatchStatus, RawApiEvent, SquadAsset } from "@/lib/types";
 import type { ApiProvider } from "./types";
 
@@ -263,15 +263,69 @@ const CLEAN_SHEET_COUNTRIES = new Set(
   ),
 );
 
+/** Standard match length used to estimate minutes played for a starter who
+ *  was never subbed off, or a substitute who was on for the rest of the
+ *  match - stoppage time isn't reported per-player by ESPN, so this is an
+ *  approximation, but it's only ever compared against the 60-minute
+ *  threshold, which it's not close to either boundary of. */
+const STANDARD_MATCH_MINUTES = 90;
+
+/** Per-player substitution clock minutes derived from a match's keyEvents
+ *  feed, keyed by ESPN's athlete.displayName (matched against the same
+ *  source's roster names, so no normalization is needed here). */
+interface SubstitutionMinutes {
+  subbedInAt: Map<string, number>;
+  subbedOutAt: Map<string, number>;
+}
+
+function parseSubstitutionMinutes(keyEvents: EspnKeyEvent[] | undefined): SubstitutionMinutes {
+  const subbedInAt = new Map<string, number>();
+  const subbedOutAt = new Map<string, number>();
+  for (const event of keyEvents ?? []) {
+    if (event.type.type !== "substitution") continue;
+    const minute = parseMinute(event.clock.displayValue);
+    const [playerIn, playerOut] = event.participants ?? [];
+    if (playerIn?.athlete?.displayName) subbedInAt.set(playerIn.athlete.displayName, minute);
+    if (playerOut?.athlete?.displayName) subbedOutAt.set(playerOut.athlete.displayName, minute);
+  }
+  return { subbedInAt, subbedOutAt };
+}
+
+/**
+ * Estimates how many minutes a roster entry was on the pitch, using the
+ * match's substitution events. Returns undefined when it can't be
+ * determined (no substitution data available for an entry flagged as a
+ * substitute) - callers should treat that as "assume eligible" rather than
+ * guessing, since most matches' keyEvents are unaffected and a false
+ * exclusion is worse than a rare missed one.
+ */
+function estimateMinutesPlayed(entry: EspnRosterPlayer, subs: SubstitutionMinutes): number | undefined {
+  const name = entry.athlete?.displayName;
+  if (!name) return undefined;
+
+  if (entry.subbedIn) {
+    const subbedInAt = subs.subbedInAt.get(name);
+    if (subbedInAt === undefined) return undefined;
+    const subbedOutAt = subs.subbedOutAt.get(name);
+    return (subbedOutAt ?? STANDARD_MATCH_MINUTES) - subbedInAt;
+  }
+
+  const subbedOutAt = subs.subbedOutAt.get(name);
+  return subbedOutAt ?? STANDARD_MATCH_MINUTES;
+}
+
 /**
  * For a completed match where one side conceded 0, finds that side's
- * squad GK/Defender asset ids who never appeared in the match at all -
- * not in the starting XI and never subbed on - per ESPN's roster data.
- * Used to exclude them from the automatic clean_sheet bonus in
- * computeMatchResultEvents (src/lib/scoring.ts), which otherwise assumes
- * every squad GK/Defender for that country played.
+ * squad GK/Defender asset ids who aren't eligible for the automatic
+ * clean_sheet bonus per ESPN's roster/keyEvents data - either because they
+ * never appeared at all (not in the starting XI and never subbed on), or
+ * because they appeared but were on the pitch for under
+ * CLEAN_SHEET_MIN_MINUTES (started and subbed off early, or came on too
+ * late as a substitute). Used by computeMatchResultEvents (src/lib/scoring.ts),
+ * which otherwise assumes every squad GK/Defender for that country played
+ * the full match.
  */
-export function findNonAppearingCleanSheetAssetIds(json: EspnSummaryResponse, match: Match): string[] {
+export function findCleanSheetIneligibleAssetIds(json: EspnSummaryResponse, match: Match): string[] {
   if (match.homeScore === null || match.awayScore === null) return [];
 
   const sides: { team: string; conceded: number; homeAway: "home" | "away" }[] = [
@@ -279,15 +333,23 @@ export function findNonAppearingCleanSheetAssetIds(json: EspnSummaryResponse, ma
     { team: match.awayTeam, conceded: match.homeScore, homeAway: "away" },
   ];
 
+  const subs = parseSubstitutionMinutes(json.keyEvents);
   const ids: string[] = [];
   for (const side of sides) {
     if (side.conceded !== 0 || !CLEAN_SHEET_COUNTRIES.has(side.team)) continue;
 
     const roster = json.rosters?.find((r) => r.homeAway === side.homeAway)?.roster ?? [];
     for (const entry of roster) {
-      if (entry.starter || entry.subbedIn) continue;
       const asset = findPlayerAsset(entry.athlete?.displayName);
-      if (asset && asset.country === side.team && CLEAN_SHEET_POSITIONS.includes(asset.position)) {
+      if (!asset || asset.country !== side.team || !CLEAN_SHEET_POSITIONS.includes(asset.position)) continue;
+
+      if (!entry.starter && !entry.subbedIn) {
+        ids.push(asset.id);
+        continue;
+      }
+
+      const minutesPlayed = estimateMinutesPlayed(entry, subs);
+      if (minutesPlayed !== undefined && minutesPlayed < CLEAN_SHEET_MIN_MINUTES) {
         ids.push(asset.id);
       }
     }
@@ -382,7 +444,7 @@ export class EspnProvider implements ApiProvider {
     return perMatch.flat();
   }
 
-  async getNonAppearingAssetIds(matches: Match[]): Promise<Record<string, string[]>> {
+  async getCleanSheetIneligibleAssetIds(matches: Match[]): Promise<Record<string, string[]>> {
     const candidates = matches.filter((m) => {
       if (m.status !== "completed" || m.homeScore === null || m.awayScore === null) return false;
       if (resolveEspnId(m.id) === undefined) return false;
@@ -399,7 +461,7 @@ export class EspnProvider implements ApiProvider {
         if (!res.ok) return [match.id, []];
 
         const json = (await res.json()) as EspnSummaryResponse;
-        return [match.id, findNonAppearingCleanSheetAssetIds(json, match)];
+        return [match.id, findCleanSheetIneligibleAssetIds(json, match)];
       }),
     );
 
