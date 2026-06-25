@@ -294,3 +294,80 @@ describe("audit log", () => {
     expect(state.auditLog[0].action).toBe("lock_match");
   });
 });
+
+describe("persist migration to v5", () => {
+  // Regression test for the Jesus Gallardo bug: browsers that already
+  // persisted a stale clean_sheet event from before the minutes-aware
+  // exclusion fix must have it scrubbed on the next load, without admin
+  // intervention.
+  it("strips a stale auto-derived clean_sheet event for a non-locked match", () => {
+    const migrate = useLeagueStore.persist.getOptions().migrate!;
+    const seed = useLeagueStore.getState();
+
+    const staleEvent: FantasyEvent = {
+      id: "evt-stale",
+      matchId: "m13",
+      assetId: "sac-4",
+      managerId: "sac",
+      type: "clean_sheet",
+      points: 2,
+      minute: 90,
+      detail: "Spain keep a clean sheet",
+      createdAt: new Date().toISOString(),
+      source: "api",
+      eventHash: null,
+    };
+
+    const persistedState = {
+      ...seed,
+      fantasyEvents: [...seed.fantasyEvents, staleEvent],
+      resultComputedMatchIds: ["m13"],
+    };
+
+    const migrated = migrate(persistedState, 4) as typeof persistedState;
+
+    expect(migrated.fantasyEvents.some((e) => e.id === "evt-stale")).toBe(false);
+    expect(migrated.resultComputedMatchIds).toEqual([]);
+  });
+
+  it("keeps a clean_sheet event on a locked match untouched", () => {
+    const migrate = useLeagueStore.persist.getOptions().migrate!;
+    const seed = useLeagueStore.getState();
+
+    const lockedMatchId = seed.matches.find((m) => m.locked)!.id;
+    const staleEvent: FantasyEvent = {
+      id: "evt-stale-locked",
+      matchId: lockedMatchId,
+      assetId: "sac-4",
+      managerId: "sac",
+      type: "clean_sheet",
+      points: 2,
+      minute: 90,
+      detail: "Spain keep a clean sheet",
+      createdAt: new Date().toISOString(),
+      source: "api",
+      eventHash: null,
+    };
+
+    const persistedState = {
+      ...seed,
+      fantasyEvents: [...seed.fantasyEvents, staleEvent],
+      resultComputedMatchIds: [lockedMatchId],
+    };
+
+    const migrated = migrate(persistedState, 4) as typeof persistedState;
+
+    expect(migrated.fantasyEvents.some((e) => e.id === "evt-stale-locked")).toBe(true);
+  });
+
+  it("never touches seed-sourced clean_sheet events", () => {
+    const migrate = useLeagueStore.persist.getOptions().migrate!;
+    const seed = useLeagueStore.getState();
+
+    const migrated = migrate({ ...seed, resultComputedMatchIds: [] }, 4) as typeof seed;
+
+    const seedCleanSheets = seed.fantasyEvents.filter((e) => e.type === "clean_sheet" && e.source === "seed");
+    const migratedCleanSheets = migrated.fantasyEvents.filter((e) => e.type === "clean_sheet" && e.source === "seed");
+    expect(migratedCleanSheets.length).toBe(seedCleanSheets.length);
+  });
+});

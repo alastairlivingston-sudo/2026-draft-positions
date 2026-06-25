@@ -622,7 +622,7 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
-      version: 4,
+      version: 5,
       migrate: (persistedState, version) => {
         let state = persistedState as LeagueData & {
           apiEventCache: string[];
@@ -667,6 +667,33 @@ export const useLeagueStore = create<LeagueStore>()(
           // exclusions; ingestApiEvents dedupes, so existing correct
           // events are untouched and only the missing ones are added.
           state = { ...state, resultComputedMatchIds: [] };
+        }
+        if (version < 5) {
+          // Earlier builds only excluded GK/Defenders who never appeared
+          // at all, so a player who appeared too briefly to qualify (e.g.
+          // Jesus Gallardo, subbed on at 78' in Mexico's 3-0 win over
+          // Czechia) still got auto-credited with the clean sheet. Strip
+          // those stale auto-derived clean_sheet events for non-locked
+          // matches and clear resultComputedMatchIds so syncMatches
+          // re-derives them against the corrected, minutes-aware exclusion
+          // logic - dedup in ingestApiEvents means legitimately-earned
+          // clean sheets simply reappear unchanged. Locked matches keep
+          // their curated/reviewed events untouched, exactly as syncMatches
+          // itself would treat them.
+          const lockedMatchIds = new Set(state.matches.filter((m) => m.locked).map((m) => m.id));
+          state = {
+            ...state,
+            fantasyEvents: state.fantasyEvents.filter(
+              (e) =>
+                !(
+                  e.type === "clean_sheet" &&
+                  e.matchId !== null &&
+                  e.source !== "seed" &&
+                  !lockedMatchIds.has(e.matchId)
+                ),
+            ),
+            resultComputedMatchIds: [],
+          };
         }
         return state;
       },
