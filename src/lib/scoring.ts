@@ -128,19 +128,18 @@ export function buildEventHash(params: {
  * at least CLEAN_SHEET_MIN_MINUTES without their team conceding while
  * they were on it. This function awards the auto/default case - the
  * team conceded nothing in the whole match, so every qualifying
- * GK/Defender gets it, except those listed in `nonPlayingAssetIds`
- * (squad players who didn't appear in the match at all, per provider
- * roster data - see EspnProvider.getNonAppearingAssetIds) or flagged
+ * GK/Defender gets it, except those listed in `ineligibleAssetIds`
+ * (squad players who either didn't appear in the match at all, or were
+ * on the pitch for under CLEAN_SHEET_MIN_MINUTES per the substitution
+ * clock - see EspnProvider.getCleanSheetIneligibleAssetIds) or flagged
  * `asset.unavailable` (not in their country's real World Cup squad at
  * all, so absent from provider roster data too - admin-set via the
- * Mapping tab). If a player appeared but came off before 60 minutes, an
- * admin should remove the individual `clean_sheet` event from the
- * Events tab to apply the rule for that specific case.
+ * Mapping tab).
  */
 export function computeMatchResultEvents(
   match: Match,
   squadAssets: SquadAsset[],
-  nonPlayingAssetIds?: Set<string>,
+  ineligibleAssetIds?: Set<string>,
 ): RawApiEvent[] {
   if (match.homeScore === null || match.awayScore === null) return [];
 
@@ -168,7 +167,7 @@ export function computeMatchResultEvents(
         side.conceded === 0 &&
         CLEAN_SHEET_POSITIONS.includes(asset.position) &&
         !asset.unavailable &&
-        !nonPlayingAssetIds?.has(asset.id)
+        !ineligibleAssetIds?.has(asset.id)
       ) {
         events.push({ fixtureId: match.id, assetId: asset.id, type: "clean_sheet", minute: 90, detail: `${side.team} keep a clean sheet` });
       }

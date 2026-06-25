@@ -60,6 +60,15 @@ interface AddAdjustmentInput {
 
 export interface LeagueStore extends LeagueData {
   apiEventCache: string[];
+  /**
+   * Match ids whose result-based events (clean sheets, team bonuses)
+   * have already been derived, so we compute them exactly once per match
+   * - on the transition to "completed", or as a one-time backfill for a
+   * match that was already "completed" in persisted state (e.g. synced
+   * before a scoring-logic fix). ingestApiEvents still dedupes, so a
+   * recompute never double-counts.
+   */
+  resultComputedMatchIds: string[];
 
   addFantasyEvent: (input: AddEventInput, actor?: string) => void;
   updateFantasyEvent: (id: string, patch: UpdateEventInput, reason: string, actor?: string) => void;
@@ -101,11 +110,17 @@ export interface LeagueStore extends LeagueData {
    * newly reported as "completed", also computes and ingests its
    * result-based events (clean sheets, team win/loss/3+ bonuses).
    *
-   * `nonAppearingAssetIds` (from EspnProvider.getNonAppearingAssetIds)
-   * lists squad GK/Defender asset ids that didn't appear in their match
-   * at all, so they're excluded from the automatic clean_sheet bonus.
+   * `cleanSheetIneligibleAssetIds` (from
+   * EspnProvider.getCleanSheetIneligibleAssetIds) maps each match id to the
+   * squad GK/Defender asset ids that aren't eligible for the clean sheet
+   * bonus in that match - they either didn't appear at all, or were on the
+   * pitch for under the 60-minute threshold - so they're excluded from the
+   * automatic clean_sheet bonus for that match only. Keyed per-match
+   * because a player can sit out one fixture yet start and keep a clean
+   * sheet in another - a flat list would wrongly suppress the bonus
+   * everywhere.
    */
-  syncMatches: (apiMatches: Match[], nonAppearingAssetIds?: string[]) => void;
+  syncMatches: (apiMatches: Match[], cleanSheetIneligibleAssetIds?: Record<string, string[]>) => void;
 
   resetToSeed: () => void;
 }
@@ -149,7 +164,7 @@ export function dedupeFantasyEvents(events: FantasyEvent[]): FantasyEvent[] {
   return events.filter((event) => event.matchId === null || kept.has(event));
 }
 
-const initialState: LeagueData & { apiEventCache: string[] } = {
+const initialState: LeagueData & { apiEventCache: string[]; resultComputedMatchIds: string[] } = {
   managers: SEED_MANAGERS,
   squadAssets: SEED_SQUAD_ASSETS,
   matches: SEED_MATCHES,
@@ -158,6 +173,7 @@ const initialState: LeagueData & { apiEventCache: string[] } = {
   scoringValues: DEFAULT_SCORING_VALUES,
   auditLog: SEED_AUDIT_LOG,
   apiEventCache: [],
+  resultComputedMatchIds: [],
 };
 
 export const useLeagueStore = create<LeagueStore>()(
@@ -543,12 +559,29 @@ export const useLeagueStore = create<LeagueStore>()(
         return newEvents.length;
       },
 
-      syncMatches: (apiMatches, nonAppearingAssetIds) => {
+      syncMatches: (apiMatches, cleanSheetIneligibleAssetIds) => {
         const state = get();
         const apiById = new Map(apiMatches.map((m) => [m.id, m]));
         const existingIds = new Set(state.matches.map((m) => m.id));
-        const nonPlaying = new Set(nonAppearingAssetIds ?? []);
+        // Per-match exclusion sets: a player who sat out one fixture must
+        // not lose a clean sheet they kept in another, so look these up by
+        // the specific match id rather than against one global set.
+        const ineligibleByMatch = cleanSheetIneligibleAssetIds ?? {};
+        const nonPlayingFor = (matchId: string) => new Set(ineligibleByMatch[matchId] ?? []);
+
+        // Derive result events once per match: on the transition to
+        // "completed", or as a one-time backfill for a match that was
+        // already "completed" in persisted state but hasn't been computed
+        // (e.g. synced before this scoring-logic fix). Locked matches keep
+        // their curated/reviewed events untouched.
+        const computed = new Set(state.resultComputedMatchIds);
+        const newlyComputed: string[] = [];
         let resultEvents: RawApiEvent[] = [];
+        const deriveOnce = (match: Match) => {
+          if (match.locked || match.status !== "completed" || computed.has(match.id)) return;
+          resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets, nonPlayingFor(match.id))];
+          newlyComputed.push(match.id);
+        };
 
         const matches = state.matches.map((match) => {
           if (match.locked) return match;
@@ -563,10 +596,7 @@ export const useLeagueStore = create<LeagueStore>()(
             minute: apiMatch.minute,
           };
 
-          if (match.status !== "completed" && updated.status === "completed") {
-            resultEvents = [...resultEvents, ...computeMatchResultEvents(updated, state.squadAssets, nonPlaying)];
-          }
-
+          deriveOnce(updated);
           return updated;
         });
 
@@ -575,12 +605,13 @@ export const useLeagueStore = create<LeagueStore>()(
         // up in the UI and get synced like any other match from now on.
         const newMatches = apiMatches.filter((m) => !existingIds.has(m.id));
         for (const match of newMatches) {
-          if (match.status === "completed") {
-            resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets, nonPlaying)];
-          }
+          deriveOnce(match);
         }
 
-        set({ matches: [...matches, ...newMatches] });
+        set({
+          matches: [...matches, ...newMatches],
+          resultComputedMatchIds: [...state.resultComputedMatchIds, ...newlyComputed],
+        });
         if (resultEvents.length > 0) {
           get().ingestApiEvents(resultEvents, "api");
         }
@@ -591,9 +622,12 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
-      version: 3,
+      version: 4,
       migrate: (persistedState, version) => {
-        let state = persistedState as LeagueData & { apiEventCache: string[] };
+        let state = persistedState as LeagueData & {
+          apiEventCache: string[];
+          resultComputedMatchIds?: string[];
+        };
         if (version < 1) {
           state = { ...state, fantasyEvents: dedupeFantasyEvents(state.fantasyEvents) };
         }
@@ -621,6 +655,18 @@ export const useLeagueStore = create<LeagueStore>()(
               (e) => !(unavailableIds.has(e.assetId) && e.type === "clean_sheet"),
             ),
           };
+        }
+        if (version < 4) {
+          // Earlier builds applied a single, match-agnostic non-appearing
+          // exclusion list across every match, so a GK/Defender who sat
+          // out one fixture lost the clean sheet they actually kept in
+          // another (e.g. Pedro Porro: absent vs Cape Verde, but started
+          // and kept one vs Saudi Arabia). Clearing resultComputedMatchIds
+          // makes syncMatches re-derive result events once for each
+          // already-completed match using the corrected per-match
+          // exclusions; ingestApiEvents dedupes, so existing correct
+          // events are untouched and only the missing ones are added.
+          state = { ...state, resultComputedMatchIds: [] };
         }
         return state;
       },

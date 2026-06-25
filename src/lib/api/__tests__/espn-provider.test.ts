@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   discoverDynamicMatches,
   EspnProvider,
-  findNonAppearingCleanSheetAssetIds,
+  findCleanSheetIneligibleAssetIds,
   resolveSquadCountry,
   type EspnEvent,
   type EspnSummaryResponse,
@@ -151,7 +151,7 @@ describe("discoverDynamicMatches", () => {
   });
 });
 
-describe("findNonAppearingCleanSheetAssetIds", () => {
+describe("findCleanSheetIneligibleAssetIds", () => {
   // m13: Spain vs Cape Verde - Spain's only squad GK/Defender is Pedro Porro (sac-4).
   const m13 = SEED_MATCHES.find((m) => m.id === "m13")!;
   const completedDraw: Match = { ...m13, status: "completed", homeScore: 0, awayScore: 0, minute: 90 };
@@ -171,7 +171,7 @@ describe("findNonAppearingCleanSheetAssetIds", () => {
       },
     ]);
 
-    expect(findNonAppearingCleanSheetAssetIds(json, completedDraw)).toEqual(["sac-4"]);
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual(["sac-4"]);
   });
 
   it("does not exclude a squad GK/Defender who started", () => {
@@ -182,7 +182,7 @@ describe("findNonAppearingCleanSheetAssetIds", () => {
       },
     ]);
 
-    expect(findNonAppearingCleanSheetAssetIds(json, completedDraw)).toEqual([]);
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual([]);
   });
 
   it("does not exclude a squad GK/Defender who came on as a substitute", () => {
@@ -193,7 +193,7 @@ describe("findNonAppearingCleanSheetAssetIds", () => {
       },
     ]);
 
-    expect(findNonAppearingCleanSheetAssetIds(json, completedDraw)).toEqual([]);
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual([]);
   });
 
   it("returns nothing for a match with no result yet", () => {
@@ -205,7 +205,7 @@ describe("findNonAppearingCleanSheetAssetIds", () => {
       },
     ]);
 
-    expect(findNonAppearingCleanSheetAssetIds(json, upcoming)).toEqual([]);
+    expect(findCleanSheetIneligibleAssetIds(json, upcoming)).toEqual([]);
   });
 
   it("returns nothing when the side conceded a goal", () => {
@@ -217,7 +217,87 @@ describe("findNonAppearingCleanSheetAssetIds", () => {
       },
     ]);
 
-    expect(findNonAppearingCleanSheetAssetIds(json, homeConceded)).toEqual([]);
+    expect(findCleanSheetIneligibleAssetIds(json, homeConceded)).toEqual([]);
+  });
+
+  it("excludes a substitute who came on too late to reach 60 minutes", () => {
+    const json: EspnSummaryResponse = {
+      rosters: [
+        {
+          homeAway: "home",
+          roster: [{ starter: false, subbedIn: true, athlete: { displayName: "Pedro Porro" } }],
+        },
+      ],
+      keyEvents: [
+        {
+          type: { type: "substitution" },
+          clock: { displayValue: "78'" },
+          participants: [{ athlete: { displayName: "Pedro Porro" } }, { athlete: { displayName: "Someone Else" } }],
+        },
+      ],
+    };
+
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual(["sac-4"]);
+  });
+
+  it("does not exclude a substitute who came on early enough to reach 60 minutes", () => {
+    const json: EspnSummaryResponse = {
+      rosters: [
+        {
+          homeAway: "home",
+          roster: [{ starter: false, subbedIn: true, athlete: { displayName: "Pedro Porro" } }],
+        },
+      ],
+      keyEvents: [
+        {
+          type: { type: "substitution" },
+          clock: { displayValue: "20'" },
+          participants: [{ athlete: { displayName: "Pedro Porro" } }, { athlete: { displayName: "Someone Else" } }],
+        },
+      ],
+    };
+
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual([]);
+  });
+
+  it("excludes a starter who was subbed off before 60 minutes", () => {
+    const json: EspnSummaryResponse = {
+      rosters: [
+        {
+          homeAway: "home",
+          roster: [{ starter: true, subbedIn: false, athlete: { displayName: "Pedro Porro" } }],
+        },
+      ],
+      keyEvents: [
+        {
+          type: { type: "substitution" },
+          clock: { displayValue: "35'" },
+          participants: [{ athlete: { displayName: "Someone Else" } }, { athlete: { displayName: "Pedro Porro" } }],
+        },
+      ],
+    };
+
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual(["sac-4"]);
+  });
+
+  it("does not exclude a starter who was subbed off after 60 minutes", () => {
+    const json: EspnSummaryResponse = {
+      rosters: [
+        {
+          homeAway: "home",
+          roster: [{ starter: true, subbedIn: false, athlete: { displayName: "Pedro Porro" } }],
+        },
+      ],
+      keyEvents: [
+        {
+          type: { type: "substitution" },
+          clock: { displayValue: "75'" },
+          participants: [{ athlete: { displayName: "Someone Else" } }, { athlete: { displayName: "Pedro Porro" } }],
+        },
+      ],
+    };
+
+    expect(findCleanSheetIneligibleAssetIds(json, completedDraw)).toEqual([]);
   });
 });
 
