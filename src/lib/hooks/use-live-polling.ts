@@ -37,6 +37,7 @@ export function useLivePolling(intervalMs?: number): LiveStatus {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [source, setSource] = useState<"mock" | "api">("mock");
+  const [staleBuild, setStaleBuild] = useState(false);
   const fetchingRef = useRef(false);
 
   const poll = useCallback(async () => {
@@ -54,6 +55,17 @@ export function useLivePolling(intervalMs?: number): LiveStatus {
 
       setSource(data.source);
       setLastUpdatedAt(new Date(data.fetchedAt));
+
+      // Detects a deploy that landed while this tab was open. The
+      // currently-loaded JS keeps running until reloaded, so a tab can sit
+      // on stale scoring logic indefinitely otherwise - this surfaces a
+      // reload prompt (see StaleBuildBanner) instead of relying on the
+      // user to notice and refresh on their own.
+      const versionRes = await fetch("/api/version");
+      if (versionRes.ok) {
+        const { buildId } = await versionRes.json();
+        if (buildId && buildId !== process.env.NEXT_PUBLIC_BUILD_ID) setStaleBuild(true);
+      }
     } finally {
       fetchingRef.current = false;
       setIsFetching(false);
@@ -67,5 +79,5 @@ export function useLivePolling(intervalMs?: number): LiveStatus {
     return () => clearInterval(id);
   }, [intervalMs, poll]);
 
-  return { lastUpdatedAt, isFetching, source, refresh: poll };
+  return { lastUpdatedAt, isFetching, source, staleBuild, refresh: poll };
 }
