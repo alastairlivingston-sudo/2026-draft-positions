@@ -37,6 +37,14 @@ export const PLAYER_ONLY_EVENTS: FantasyEventType[] = [
 /** All loggable fantasy event types (excludes manual_adjustment, which has its own flow). */
 export const LOGGABLE_EVENT_TYPES: FantasyEventType[] = [...PLAYER_ONLY_EVENTS, ...TEAM_ONLY_EVENTS];
 
+/**
+ * Event types produced exclusively by `computeMatchResultEvents`, derived
+ * purely from a match's final score rather than from a live keyEvents feed.
+ * Used to identify and replace stale auto-derived events when a match's
+ * reported score changes between polls (see `syncMatches`).
+ */
+export const RESULT_EVENT_TYPES: FantasyEventType[] = [...TEAM_ONLY_EVENTS, "clean_sheet"];
+
 export const CLEAN_SHEET_POSITIONS: Position[] = ["Goalkeeper", "Defender"];
 
 /**

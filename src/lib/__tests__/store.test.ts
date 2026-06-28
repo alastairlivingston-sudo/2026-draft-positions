@@ -202,6 +202,24 @@ describe("syncMatches", () => {
     expect(useLeagueStore.getState().fantasyEvents.length).toBe(afterFirst);
   });
 
+  it("applies the corrected result bonus when a later poll fixes an already-completed match's score", () => {
+    // Regression test: a provider can report a wrong/incomplete score for a
+    // match that's already "completed" (e.g. a transient glitch, or a score
+    // update that lands a poll late) before correcting it. The team_win /
+    // team_scored_3plus bonus due on the real final score must still land
+    // once the correction comes through, not get stuck on the earlier
+    // snapshot forever.
+    const before = useLeagueStore.getState().matches.find((m) => m.id === "m18")!;
+    const polakBefore = getManagerTotal(useLeagueStore.getState(), "polak");
+
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 1, awayScore: 1, minute: 90 }]);
+    expect(getManagerTotal(useLeagueStore.getState(), "polak")).toBe(polakBefore);
+
+    useLeagueStore.getState().syncMatches([{ ...before, status: "completed", homeScore: 1, awayScore: 3, minute: 90 }]);
+
+    expect(getManagerTotal(useLeagueStore.getState(), "polak")).toBe(polakBefore + 2);
+  });
+
   it("does not modify locked matches", () => {
     const before = useLeagueStore.getState().matches.find((m) => m.id === "m1")!;
     expect(before.locked).toBe(true);

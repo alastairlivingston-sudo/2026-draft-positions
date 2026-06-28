@@ -10,7 +10,7 @@ import {
   SEED_MATCHES,
   SEED_SQUAD_ASSETS,
 } from "@/lib/data/seed";
-import { calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES } from "@/lib/scoring";
+import { calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES, RESULT_EVENT_TYPES } from "@/lib/scoring";
 import { getAssetPoints, getManagerTotal, type LeagueData } from "@/lib/selectors";
 import type {
   AuditAction,
@@ -435,12 +435,30 @@ export const useLeagueStore = create<LeagueStore>()(
           reason: "Match result corrected manually by admin",
         });
 
+        // A score correction on an already-completed match must re-derive
+        // its result events too, not just on the first transition to
+        // "completed" - otherwise correcting e.g. a 1-1 to the real 1-3
+        // would never apply the now-due team_win/scored_3plus bonus.
+        const isStaleResultEvent = (e: FantasyEvent) =>
+          e.matchId === matchId && e.source !== "seed" && RESULT_EVENT_TYPES.includes(e.type);
+        const staleHashes = new Set(
+          updated.status === "completed"
+            ? state.fantasyEvents.filter(isStaleResultEvent).map((e) => e.eventHash).filter((h): h is string => h !== null)
+            : [],
+        );
+        const fantasyEvents =
+          updated.status === "completed" ? state.fantasyEvents.filter((e) => !isStaleResultEvent(e)) : state.fantasyEvents;
+        const apiEventCache =
+          staleHashes.size > 0 ? state.apiEventCache.filter((h) => !staleHashes.has(h)) : state.apiEventCache;
+
         set({
           matches: state.matches.map((m) => (m.id === matchId ? updated : m)),
+          fantasyEvents,
+          apiEventCache,
           auditLog,
         });
 
-        if (match.status !== "completed" && updated.status === "completed") {
+        if (updated.status === "completed") {
           const resultEvents = computeMatchResultEvents(updated, state.squadAssets);
           if (resultEvents.length > 0) get().ingestApiEvents(resultEvents, "manual");
         }
@@ -569,19 +587,15 @@ export const useLeagueStore = create<LeagueStore>()(
         const ineligibleByMatch = cleanSheetIneligibleAssetIds ?? {};
         const nonPlayingFor = (matchId: string) => new Set(ineligibleByMatch[matchId] ?? []);
 
-        // Derive result events once per match: on the transition to
-        // "completed", or as a one-time backfill for a match that was
-        // already "completed" in persisted state but hasn't been computed
-        // (e.g. synced before this scoring-logic fix). Locked matches keep
-        // their curated/reviewed events untouched.
-        const computed = new Set(state.resultComputedMatchIds);
-        const newlyComputed: string[] = [];
-        let resultEvents: RawApiEvent[] = [];
-        const deriveOnce = (match: Match) => {
-          if (match.locked || match.status !== "completed" || computed.has(match.id)) return;
-          resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets, nonPlayingFor(match.id))];
-          newlyComputed.push(match.id);
-        };
+        // Result events (team_win/loss, scored/conceded 3+, clean_sheet) are
+        // derived purely from a match's final score. Live providers can
+        // report a wrong or incomplete score before correcting it on a
+        // later poll, so every sync recomputes from scratch for each
+        // completed, non-locked match rather than computing once and
+        // locking that snapshot in forever - see the matching cleanup of
+        // stale auto-derived events below. Locked matches keep their
+        // curated/reviewed events untouched.
+        const matchesToRederive: Match[] = [];
 
         const matches = state.matches.map((match) => {
           if (match.locked) return match;
@@ -596,7 +610,7 @@ export const useLeagueStore = create<LeagueStore>()(
             minute: apiMatch.minute,
           };
 
-          deriveOnce(updated);
+          if (updated.status === "completed") matchesToRederive.push(updated);
           return updated;
         });
 
@@ -605,12 +619,33 @@ export const useLeagueStore = create<LeagueStore>()(
         // up in the UI and get synced like any other match from now on.
         const newMatches = apiMatches.filter((m) => !existingIds.has(m.id));
         for (const match of newMatches) {
-          deriveOnce(match);
+          if (match.status === "completed" && !match.locked) matchesToRederive.push(match);
+        }
+
+        const rederivedMatchIds = new Set(matchesToRederive.map((m) => m.id));
+        const isStaleResultEvent = (e: FantasyEvent) =>
+          Boolean(e.matchId) && rederivedMatchIds.has(e.matchId!) && e.source !== "seed" && RESULT_EVENT_TYPES.includes(e.type);
+        const staleHashes = new Set(
+          state.fantasyEvents.filter(isStaleResultEvent).map((e) => e.eventHash).filter((h): h is string => h !== null),
+        );
+        const fantasyEvents = state.fantasyEvents.filter((e) => !isStaleResultEvent(e));
+        // Their hashes must be evicted from apiEventCache too, otherwise a
+        // re-derived event identical to the stale one it replaced (same
+        // score, same detail text -> same hash) would be silently dropped
+        // by ingestApiEvents' hash dedup below, even though it's no longer
+        // present in fantasyEvents.
+        const apiEventCache =
+          staleHashes.size > 0 ? state.apiEventCache.filter((h) => !staleHashes.has(h)) : state.apiEventCache;
+
+        let resultEvents: RawApiEvent[] = [];
+        for (const match of matchesToRederive) {
+          resultEvents = [...resultEvents, ...computeMatchResultEvents(match, state.squadAssets, nonPlayingFor(match.id))];
         }
 
         set({
           matches: [...matches, ...newMatches],
-          resultComputedMatchIds: [...state.resultComputedMatchIds, ...newlyComputed],
+          fantasyEvents,
+          apiEventCache,
         });
         if (resultEvents.length > 0) {
           get().ingestApiEvents(resultEvents, "api");
