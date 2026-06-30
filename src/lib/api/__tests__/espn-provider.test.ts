@@ -420,6 +420,114 @@ describe("EspnProvider.getLiveEvents", () => {
     ]);
   });
 
+  // penalty---saved: ESPN names the keeper in the event text "...by [Name] ([Country])."
+  // so we parse that directly rather than relying on the roster.
+  it("awards penalty_saved to the keeper named in a penalty---saved event's text", async () => {
+    const penSavedNamedSummary: EspnSummaryResponse = {
+      keyEvents: [
+        {
+          type: { type: "penalty---saved" },
+          text: "Penalty saved by Alisson (Brazil).",
+          clock: { displayValue: "55'" },
+          participants: [{ athlete: { displayName: "Mehdi Taremi" } }],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => penSavedNamedSummary }) as unknown as Response),
+    );
+    const completed: Match = { ...m22, status: "completed", homeScore: 0, awayScore: 0, minute: 90 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      { fixtureId: "m22", assetId: "lev-3", type: "penalty_missed", minute: 55, detail: "Penalty saved by Alisson (Brazil)." },
+      { fixtureId: "m22", assetId: "saul-7", type: "penalty_saved", minute: 55, detail: "Penalty saved by Alisson (Brazil)." },
+    ]);
+  });
+
+  // penalty---missed: keeper is not mentioned in the event text at all, so we
+  // fall back to the roster to find the squad GK on the defending side.
+  // m6: Brazil (home) vs Morocco (away). Ben Seghir (josh-4) takes the pen
+  // from the away side, so the defending GK is Brazil's Alisson (saul-7).
+  it("awards penalty_saved to the defending squad GK from the roster when a penalty---missed has no keeper in text", async () => {
+    const m6 = SEED_MATCHES.find((m) => m.id === "m6")!;
+    const penMissedSummary: EspnSummaryResponse = {
+      keyEvents: [
+        {
+          type: { type: "penalty---missed" },
+          text: "Eliesse Ben Seghir shot missed.",
+          clock: { displayValue: "33'" },
+          participants: [{ athlete: { displayName: "Eliesse Ben Seghir" } }],
+        },
+      ],
+      rosters: [
+        {
+          homeAway: "home",
+          roster: [{ starter: true, subbedIn: false, athlete: { displayName: "Alisson" } }],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => penMissedSummary }) as unknown as Response),
+    );
+    const completed: Match = { ...m6, status: "completed", homeScore: 1, awayScore: 0, minute: 90 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      { fixtureId: "m6", assetId: "josh-4", type: "penalty_missed", minute: 33, detail: "Eliesse Ben Seghir shot missed." },
+      { fixtureId: "m6", assetId: "saul-7", type: "penalty_saved", minute: 33, detail: "Eliesse Ben Seghir shot missed." },
+    ]);
+  });
+
+  // Shootout miss: the opposing squad GK (Alisson, saul-7) should get
+  // penalty_saved credit when Morocco miss a kick against Brazil (m6).
+  it("awards penalty_saved to the opposing squad GK on a shootout miss", async () => {
+    const m6 = SEED_MATCHES.find((m) => m.id === "m6")!;
+    const shootoutWithKeeperSummary: EspnSummaryResponse = {
+      keyEvents: [],
+      rosters: [
+        {
+          homeAway: "home",
+          roster: [{ starter: true, subbedIn: false, athlete: { displayName: "Alisson" } }],
+        },
+      ],
+      shootout: [
+        {
+          team: "Morocco",
+          shots: [{ player: "Eliesse Ben Seghir", didScore: false }],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => shootoutWithKeeperSummary }) as unknown as Response),
+    );
+    const completed: Match = { ...m6, status: "completed", homeScore: 1, awayScore: 1, minute: 120 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      {
+        fixtureId: "m6",
+        assetId: "josh-4",
+        type: "penalty_missed",
+        minute: 120,
+        detail: "Eliesse Ben Seghir misses penalty shootout kick 1",
+      },
+      {
+        fixtureId: "m6",
+        assetId: "saul-7",
+        type: "penalty_saved",
+        minute: 120,
+        detail: "Eliesse Ben Seghir misses penalty shootout kick 1",
+      },
+    ]);
+  });
+
   // Penalty shootouts arrive in ESPN's separate "shootout" field, not
   // keyEvents - confirmed against the real Germany vs Paraguay shootout,
   // where Kai Havertz (lev-1) missed Germany's first kick.

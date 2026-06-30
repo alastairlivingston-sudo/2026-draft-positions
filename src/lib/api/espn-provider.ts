@@ -237,7 +237,64 @@ function isGoalEvent(type: string): boolean {
   return type === "goal" || type.startsWith("goal---") || type === "penalty---scored";
 }
 
-function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
+/** Finds the squad GK who was on the pitch for a given side of a match,
+ *  from the ESPN roster data. Returns undefined if no squad GK appeared. */
+function findActiveSquadGk(rosters: EspnRosterGroup[] | undefined, side: "home" | "away"): SquadAsset | undefined {
+  const roster = rosters?.find((r) => r.homeAway === side)?.roster ?? [];
+  for (const entry of roster) {
+    if (!entry.starter && !entry.subbedIn) continue;
+    const asset = findPlayerAsset(entry.athlete?.displayName);
+    if (asset?.position === "Goalkeeper") return asset;
+  }
+  return undefined;
+}
+
+/** Determines which side of a match a penalty taker belongs to, so the
+ *  defending keeper can be identified. Tries the taker's squad country first,
+ *  then falls back to parsing "(Country)" from the event text. */
+function findDefendingSide(
+  event: EspnKeyEvent,
+  match: Match,
+): "home" | "away" | undefined {
+  const takerName = event.participants?.[0]?.athlete.displayName;
+  const takerCountry =
+    findPlayerAsset(takerName)?.country ??
+    (() => {
+      const m = event.text?.match(/^[^(]*\(([^)]+)\)/);
+      return m ? (resolveSquadCountry(m[1]) ?? m[1]) : undefined;
+    })();
+  if (!takerCountry) return undefined;
+  if (takerCountry === match.homeTeam) return "away";
+  if (takerCountry === match.awayTeam) return "home";
+  return undefined;
+}
+
+/** Finds the squad GK who should receive penalty_saved credit for a missed
+ *  in-play penalty. For penalty---saved events, ESPN names the keeper in the
+ *  event text ("...by [Name] ([Country])."), so we try that first. For
+ *  penalty---missed (wide/post), we fall back to the roster. */
+function findKeeperForPenaltyMiss(
+  event: EspnKeyEvent,
+  match: Match,
+  rosters: EspnRosterGroup[] | undefined,
+): SquadAsset | undefined {
+  if (event.type.type === "penalty---saved") {
+    const m = event.text?.match(/\bby ([^(]+?)\s*\(/);
+    if (m) {
+      const keeper = findPlayerAsset(m[1].trim());
+      if (keeper) return keeper;
+    }
+  }
+  const side = findDefendingSide(event, match);
+  return side ? findActiveSquadGk(rosters, side) : undefined;
+}
+
+interface MatchContext {
+  match: Match;
+  rosters: EspnRosterGroup[] | undefined;
+}
+
+function mapKeyEvent(fixtureId: string, event: EspnKeyEvent, ctx?: MatchContext): RawApiEvent[] {
   const type = event.type.type;
   const minute = parseMinute(event.clock.displayValue);
   const detail = event.text ?? "";
@@ -263,12 +320,18 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
     return player ? [{ fixtureId, assetId: player.id, type: eventType, minute, detail }] : [];
   }
 
-  // Any non-scored penalty (saved OR missed target) counts as penalty_missed.
-  // penalty---scored is caught by isGoalEvent above, so any remaining
-  // penalty type here is a failed kick.
+  // Any non-scored penalty (saved OR missed target) counts as penalty_missed
+  // for the taker and penalty_saved for the opposing keeper.
+  // penalty---scored is caught by isGoalEvent above.
   if (type.includes("penalty")) {
-    const player = findPlayerAsset(participants[0]?.athlete.displayName);
-    return player ? [{ fixtureId, assetId: player.id, type: "penalty_missed", minute, detail }] : [];
+    const events: RawApiEvent[] = [];
+    const taker = findPlayerAsset(participants[0]?.athlete.displayName);
+    if (taker) events.push({ fixtureId, assetId: taker.id, type: "penalty_missed", minute, detail });
+    if (ctx) {
+      const keeper = findKeeperForPenaltyMiss(event, ctx.match, ctx.rosters);
+      if (keeper) events.push({ fixtureId, assetId: keeper.id, type: "penalty_saved", minute, detail });
+    }
+    return events;
   }
 
   return [];
@@ -278,30 +341,59 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
  *  their own, so this matches the "Start Shootout" keyEvent's minute. */
 const SHOOTOUT_MINUTE = 120;
 
-/** Maps a match's penalty shootout (present only when it went to penalties,
- *  see EspnSummaryResponse.shootout - a separate field from keyEvents) onto
- *  goal/penalty_missed fantasy events, per SCORING_LABELS' documented intent
- *  that missed penalties count "including shootouts". A converted kick
- *  scores like any other goal (no assist - there isn't one); a missed kick
- *  is scored as penalty_missed. ESPN's shootout data has no saved-vs-wide
- *  distinction, so penalty saves still require manual admin entry. */
-function mapShootoutEvents(fixtureId: string, shootout: EspnShootoutTeam[] | undefined): RawApiEvent[] {
+/** Resolves an ESPN shootout team name to "home" or "away" for a given match,
+ *  so the opposing keeper can be looked up from rosters. */
+function resolveShootoutTeamSide(teamName: string, match: Match): "home" | "away" | undefined {
+  if (teamName === match.homeTeam) return "home";
+  if (teamName === match.awayTeam) return "away";
+  const resolved = resolveSquadCountry(teamName);
+  if (resolved === match.homeTeam) return "home";
+  if (resolved === match.awayTeam) return "away";
+  return undefined;
+}
+
+/** Maps a match's penalty shootout onto fantasy events. A converted kick
+ *  scores as a goal for the taker; a missed kick scores as penalty_missed for
+ *  the taker and penalty_saved for the opposing squad GK (if one was playing). */
+function mapShootoutEvents(
+  fixtureId: string,
+  shootout: EspnShootoutTeam[] | undefined,
+  match?: Match,
+  rosters?: EspnRosterGroup[],
+): RawApiEvent[] {
   const events: RawApiEvent[] = [];
   for (const team of shootout ?? []) {
+    const keeperSide =
+      match
+        ? (() => {
+            const s = resolveShootoutTeamSide(team.team, match);
+            return s === "home" ? "away" : s === "away" ? "home" : undefined;
+          })()
+        : undefined;
+
     team.shots.forEach((shot, index) => {
       const player = findPlayerAsset(shot.player);
-      if (!player) return;
       const shotNumber = index + 1;
       const detail = shot.didScore
         ? `${shot.player} scores penalty shootout kick ${shotNumber}`
         : `${shot.player} misses penalty shootout kick ${shotNumber}`;
-      events.push({
-        fixtureId,
-        assetId: player.id,
-        type: shot.didScore ? "goal" : "penalty_missed",
-        minute: SHOOTOUT_MINUTE,
-        detail,
-      });
+
+      if (player) {
+        events.push({
+          fixtureId,
+          assetId: player.id,
+          type: shot.didScore ? "goal" : "penalty_missed",
+          minute: SHOOTOUT_MINUTE,
+          detail,
+        });
+      }
+
+      if (!shot.didScore && keeperSide) {
+        const keeper = findActiveSquadGk(rosters, keeperSide);
+        if (keeper) {
+          events.push({ fixtureId, assetId: keeper.id, type: "penalty_saved", minute: SHOOTOUT_MINUTE, detail });
+        }
+      }
     });
   }
   return events;
@@ -429,9 +521,8 @@ export function findCleanSheetIneligibleAssetIds(json: EspnSummaryResponse, matc
  * - Penalty shootouts (knockout draws) are reported in a separate
  *   "shootout" field, not keyEvents - see mapShootoutEvents. A converted
  *   kick scores as a goal, a missed kick as penalty_missed.
- * - Penalty saves (in regular play or a shootout) aren't reported as a
- *   distinct event and still need to be logged manually from the admin
- *   dashboard.
+ * - Penalty saves (in regular play or a shootout) are automatically awarded
+ *   to the opposing squad GK via findKeeperForPenaltyMiss / mapShootoutEvents.
  * - Clean sheets and team win/loss/3+ bonuses need no player/team mapping
  *   at all - they're derived locally from the final score by
  *   computeMatchResultEvents (src/lib/scoring.ts) once a match is
@@ -494,8 +585,8 @@ export class EspnProvider implements ApiProvider {
 
         const json = (await res.json()) as EspnSummaryResponse;
         return [
-          ...(json.keyEvents ?? []).flatMap((event) => mapKeyEvent(match.id, event)),
-          ...mapShootoutEvents(match.id, json.shootout),
+          ...(json.keyEvents ?? []).flatMap((event) => mapKeyEvent(match.id, event, { match, rosters: json.rosters })),
+          ...mapShootoutEvents(match.id, json.shootout, match, json.rosters),
         ];
       }),
     );
