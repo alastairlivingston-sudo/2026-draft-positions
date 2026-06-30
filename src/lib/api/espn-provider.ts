@@ -58,9 +58,23 @@ export interface EspnRosterGroup {
   roster: EspnRosterPlayer[];
 }
 
+/** A single penalty kick from ESPN's "shootout" array - a separate top-level
+ *  field from keyEvents, only present on matches that went to penalties. */
+export interface EspnShootoutShot {
+  player?: string;
+  didScore: boolean;
+}
+
+export interface EspnShootoutTeam {
+  team: string;
+  shots: EspnShootoutShot[];
+}
+
 export interface EspnSummaryResponse {
   keyEvents?: EspnKeyEvent[];
   rosters?: EspnRosterGroup[];
+  /** Penalty-by-penalty shootout record, present only when the match went to penalties. */
+  shootout?: EspnShootoutTeam[];
 }
 
 const PLAYER_ASSETS_BY_NAME = new Map(
@@ -255,6 +269,39 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
   return [];
 }
 
+/** Minute recorded against shootout-derived events - shots have no clock of
+ *  their own, so this matches the "Start Shootout" keyEvent's minute. */
+const SHOOTOUT_MINUTE = 120;
+
+/** Maps a match's penalty shootout (present only when it went to penalties,
+ *  see EspnSummaryResponse.shootout - a separate field from keyEvents) onto
+ *  goal/penalty_missed fantasy events, per SCORING_LABELS' documented intent
+ *  that missed penalties count "including shootouts". A converted kick
+ *  scores like any other goal (no assist - there isn't one); a missed kick
+ *  is scored as penalty_missed. ESPN's shootout data has no saved-vs-wide
+ *  distinction, so penalty saves still require manual admin entry. */
+function mapShootoutEvents(fixtureId: string, shootout: EspnShootoutTeam[] | undefined): RawApiEvent[] {
+  const events: RawApiEvent[] = [];
+  for (const team of shootout ?? []) {
+    team.shots.forEach((shot, index) => {
+      const player = findPlayerAsset(shot.player);
+      if (!player) return;
+      const shotNumber = index + 1;
+      const detail = shot.didScore
+        ? `${shot.player} scores penalty shootout kick ${shotNumber}`
+        : `${shot.player} misses penalty shootout kick ${shotNumber}`;
+      events.push({
+        fixtureId,
+        assetId: player.id,
+        type: shot.didScore ? "goal" : "penalty_missed",
+        minute: SHOOTOUT_MINUTE,
+        detail,
+      });
+    });
+  }
+  return events;
+}
+
 /** Countries with at least one squad GK/Defender, for whom a clean sheet
  *  bonus is fantasy-relevant. */
 const CLEAN_SHEET_COUNTRIES = new Set(
@@ -374,8 +421,12 @@ export function findCleanSheetIneligibleAssetIds(json: EspnSummaryResponse, matc
  *   live or completed fixture's keyEvents feed, matched to squad players
  *   by name. Completed matches are re-checked (not just live ones) so a
  *   match whose live window was missed entirely still gets backfilled.
- * - Penalty saves aren't reported as a distinct event and still need to
- *   be logged manually from the admin dashboard.
+ * - Penalty shootouts (knockout draws) are reported in a separate
+ *   "shootout" field, not keyEvents - see mapShootoutEvents. A converted
+ *   kick scores as a goal, a missed kick as penalty_missed.
+ * - Penalty saves (in regular play or a shootout) aren't reported as a
+ *   distinct event and still need to be logged manually from the admin
+ *   dashboard.
  * - Clean sheets and team win/loss/3+ bonuses need no player/team mapping
  *   at all - they're derived locally from the final score by
  *   computeMatchResultEvents (src/lib/scoring.ts) once a match is
@@ -437,7 +488,10 @@ export class EspnProvider implements ApiProvider {
         if (!res.ok) return [];
 
         const json = (await res.json()) as EspnSummaryResponse;
-        return (json.keyEvents ?? []).flatMap((event) => mapKeyEvent(match.id, event));
+        return [
+          ...(json.keyEvents ?? []).flatMap((event) => mapKeyEvent(match.id, event)),
+          ...mapShootoutEvents(match.id, json.shootout),
+        ];
       }),
     );
 

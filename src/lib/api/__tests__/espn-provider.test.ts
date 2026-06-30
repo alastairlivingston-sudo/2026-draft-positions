@@ -353,4 +353,46 @@ describe("EspnProvider.getLiveEvents", () => {
     expect(events).toEqual([]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  // Penalty shootouts arrive in ESPN's separate "shootout" field, not
+  // keyEvents - confirmed against the real Germany vs Paraguay shootout,
+  // where Kai Havertz (lev-1) missed Germany's first kick.
+  it("maps shootout kicks to goal/penalty_missed events, separately from keyEvents", async () => {
+    const shootoutSummary: EspnSummaryResponse = {
+      keyEvents: [],
+      shootout: [
+        {
+          team: "Germany",
+          shots: [
+            { player: "Kai Havertz", didScore: false },
+            { player: "Mohammed Kudus", didScore: true },
+          ],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => shootoutSummary }) as unknown as Response),
+    );
+    const completed: Match = { ...m22, status: "completed", homeScore: 1, awayScore: 1, minute: 120 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      {
+        fixtureId: "m22",
+        assetId: "lev-1",
+        type: "penalty_missed",
+        minute: 120,
+        detail: "Kai Havertz misses penalty shootout kick 1",
+      },
+      {
+        fixtureId: "m22",
+        assetId: "saul-5",
+        type: "goal",
+        minute: 120,
+        detail: "Mohammed Kudus scores penalty shootout kick 2",
+      },
+    ]);
+  });
 });
