@@ -354,9 +354,9 @@ describe("EspnProvider.getLiveEvents", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  // goal---free-kick is a distinct ESPN type, separate from "goal" - confirmed
-  // missing from our allowlist when Kevin Pina's free-kick goal (Uruguay v
-  // Cape Verde) didn't score any points.
+  // goal---free-kick is a distinct ESPN subtype - confirmed missing when Kevin
+  // Pina's free-kick goal (Uruguay v Cape Verde) didn't score. Now covered by
+  // the isGoalEvent prefix match (goal---*) rather than an explicit allowlist.
   it("scores a goal---free-kick event as a goal", async () => {
     const fkSummary: EspnSummaryResponse = {
       keyEvents: [

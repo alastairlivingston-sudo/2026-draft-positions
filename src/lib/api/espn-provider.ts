@@ -228,11 +228,14 @@ function resolveEspnId(matchId: string): number | undefined {
   return dynamicId ? Number(dynamicId[1]) : undefined;
 }
 
-/** ESPN goal event subtypes confirmed in live World Cup data. Kept as an
- *  explicit allowlist (rather than a "goal---" prefix match) so a possible
- *  future "goal---disallowed"-style VAR overturn isn't miscounted as a scored
- *  goal. Add new variants here as they appear (e.g. goal---free-kick). */
-const GOAL_EVENT_TYPES = new Set(["goal", "goal---header", "goal---volley", "goal---free-kick", "penalty---scored"]);
+/** Returns true for any ESPN event type that represents a scored goal.
+ *  Matches "goal" (standard) or any "goal---*" subtype (header, volley,
+ *  free-kick, etc.) plus "penalty---scored". own-goal has its own handling
+ *  below. The prefix approach means new ESPN goal subtypes are covered
+ *  automatically without needing to update an allowlist. */
+function isGoalEvent(type: string): boolean {
+  return type === "goal" || type.startsWith("goal---") || type === "penalty---scored";
+}
 
 function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
   const type = event.type.type;
@@ -240,7 +243,7 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
   const detail = event.text ?? "";
   const participants = event.participants ?? [];
 
-  if (GOAL_EVENT_TYPES.has(type)) {
+  if (isGoalEvent(type)) {
     const events: RawApiEvent[] = [];
     const scorer = findPlayerAsset(participants[0]?.athlete.displayName);
     if (scorer) events.push({ fixtureId, assetId: scorer.id, type: "goal", minute, detail });
@@ -260,9 +263,9 @@ function mapKeyEvent(fixtureId: string, event: EspnKeyEvent): RawApiEvent[] {
     return player ? [{ fixtureId, assetId: player.id, type: eventType, minute, detail }] : [];
   }
 
-  // Any non-scored penalty (saved OR missed target) counts as penalty_missed
-  // per scoring rules. penalty---scored is already handled by GOAL_EVENT_TYPES
-  // above, so any remaining penalty type here is a failed kick.
+  // Any non-scored penalty (saved OR missed target) counts as penalty_missed.
+  // penalty---scored is caught by isGoalEvent above, so any remaining
+  // penalty type here is a failed kick.
   if (type.includes("penalty")) {
     const player = findPlayerAsset(participants[0]?.athlete.displayName);
     return player ? [{ fixtureId, assetId: player.id, type: "penalty_missed", minute, detail }] : [];
