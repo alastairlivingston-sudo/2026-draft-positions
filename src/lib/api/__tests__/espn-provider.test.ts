@@ -354,6 +354,72 @@ describe("EspnProvider.getLiveEvents", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // goal---free-kick is a distinct ESPN type, separate from "goal" - confirmed
+  // missing from our allowlist when Kevin Pina's free-kick goal (Uruguay v
+  // Cape Verde) didn't score any points.
+  it("scores a goal---free-kick event as a goal", async () => {
+    const fkSummary: EspnSummaryResponse = {
+      keyEvents: [
+        {
+          type: { type: "goal---free-kick" },
+          text: "Kevin Pina scores from a free kick",
+          clock: { displayValue: "21'" },
+          participants: [{ athlete: { displayName: "Kevin Pina" } }],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => fkSummary }) as unknown as Response),
+    );
+    const completed: Match = { ...m22, status: "completed", homeScore: 1, awayScore: 0, minute: 90 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      {
+        fixtureId: "m22",
+        assetId: "jamie-2",
+        type: "goal",
+        minute: 21,
+        detail: "Kevin Pina scores from a free kick",
+      },
+    ]);
+  });
+
+  // penalty---saved is ESPN's event type when the keeper saves the kick -
+  // confirmed missing when Mehdi Taremi's saved penalty (Egypt v Iran) didn't
+  // deduct any points. Both saved and missed-target penalties count the same.
+  it("scores a penalty---saved event as penalty_missed", async () => {
+    const penSummary: EspnSummaryResponse = {
+      keyEvents: [
+        {
+          type: { type: "penalty---saved" },
+          text: "Penalty saved. Mehdi Taremi shot saved.",
+          clock: { displayValue: "11'" },
+          participants: [{ athlete: { displayName: "Mehdi Taremi" } }],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => penSummary }) as unknown as Response),
+    );
+    const completed: Match = { ...m22, status: "completed", homeScore: 1, awayScore: 1, minute: 90 };
+
+    const events = await new EspnProvider().getLiveEvents([completed]);
+
+    expect(events).toEqual([
+      {
+        fixtureId: "m22",
+        assetId: "lev-3",
+        type: "penalty_missed",
+        minute: 11,
+        detail: "Penalty saved. Mehdi Taremi shot saved.",
+      },
+    ]);
+  });
+
   // Penalty shootouts arrive in ESPN's separate "shootout" field, not
   // keyEvents - confirmed against the real Germany vs Paraguay shootout,
   // where Kai Havertz (lev-1) missed Germany's first kick.
