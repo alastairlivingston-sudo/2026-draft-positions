@@ -122,6 +122,18 @@ export interface LeagueStore extends LeagueData {
    */
   syncMatches: (apiMatches: Match[], cleanSheetIneligibleAssetIds?: Record<string, string[]>) => void;
 
+  /**
+   * Replaces the read side of the store wholesale with a Supabase snapshot
+   * (see /api/league-snapshot and useSupabaseSnapshotPolling) - used only
+   * when NEXT_PUBLIC_USE_SUPABASE is on, in place of the ESPN-derived
+   * syncMatches/ingestApiEvents path. Supabase is already the single
+   * source of truth at this point (the cron/admin-refresh ingest computed
+   * everything server-side), so this is a full replace, not a merge.
+   * Admin mutation actions above are untouched - Phase 3 moves those to
+   * Supabase-backed server actions.
+   */
+  hydrateFromSnapshot: (data: LeagueData) => void;
+
   resetToSeed: () => void;
 }
 
@@ -655,6 +667,8 @@ export const useLeagueStore = create<LeagueStore>()(
           get().ingestApiEvents(resultEvents, "api");
         }
       },
+
+      hydrateFromSnapshot: (data) => set(data),
 
       resetToSeed: () => set({ ...initialState }),
     }),

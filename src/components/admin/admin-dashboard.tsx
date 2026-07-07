@@ -6,6 +6,7 @@ import { AdminEventsTab } from "@/components/admin/admin-events-tab";
 import { AdminMappingTab } from "@/components/admin/admin-mapping-tab";
 import { AdminMatchesTab } from "@/components/admin/admin-matches-tab";
 import { AdminScoringTab } from "@/components/admin/admin-scoring-tab";
+import { AdminSupabaseRefresh } from "@/components/admin/admin-supabase-refresh";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function AdminDashboard() {
@@ -15,6 +16,8 @@ export function AdminDashboard() {
         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Admin Dashboard</h1>
         <p className="text-sm text-muted-foreground">Manage events, adjustments, scoring rules, matches and squad mapping</p>
       </div>
+
+      {process.env.NEXT_PUBLIC_USE_SUPABASE === "true" && <AdminSupabaseRefresh />}
 
       <Tabs defaultValue="events">
         <div className="overflow-x-auto">
