@@ -608,6 +608,10 @@ export const useLeagueStore = create<LeagueStore>()(
             homeScore: apiMatch.homeScore,
             awayScore: apiMatch.awayScore,
             minute: apiMatch.minute,
+            // Carry the shootout winner through too, so a knockout tie that
+            // was already in the store before it finished still awards the
+            // penalty-shootout winner their team_win (see Match.winner).
+            winner: apiMatch.winner ?? null,
           };
 
           if (updated.status === "completed") matchesToRederive.push(updated);
@@ -657,7 +661,7 @@ export const useLeagueStore = create<LeagueStore>()(
     {
       name: "wc-fantasy-league-v5",
       storage: createJSONStorage(() => localStorage),
-      version: 5,
+      version: 6,
       migrate: (persistedState, version) => {
         let state = persistedState as LeagueData & {
           apiEventCache: string[];
@@ -729,6 +733,16 @@ export const useLeagueStore = create<LeagueStore>()(
             ),
             resultComputedMatchIds: [],
           };
+        }
+        if (version < 6) {
+          // Knockout fixtures that first appeared while the app was on mock
+          // data (or an older build) can persist without their team_win/loss
+          // bonuses - e.g. Norway's win over Brazil in the Round of 16 never
+          // scoring. Clearing apiEventCache lets the next poll's re-derivation
+          // re-ingest any missing result events; ingestApiEvents still dedupes
+          // by (match, asset, type, minute) against surviving events, so
+          // nothing double-counts and correct events are untouched.
+          state = { ...state, apiEventCache: [] };
         }
         return state;
       },
