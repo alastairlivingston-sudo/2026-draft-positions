@@ -61,10 +61,18 @@ reads the same data.
 ## Phases (each independently deployable, guarded by `NEXT_PUBLIC_USE_SUPABASE`)
 
 ### Phase 0 — Provision & scaffold (no behavior change)
-- **[manual, you]** Add the Vercel → Supabase integration; it injects the env vars.
-- Apply `supabase/schema.sql` (+ the `winner` column).
+- ~~Add the Vercel → Supabase integration~~ **DONE** — Supabase is provisioned;
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+  `SUPABASE_SERVICE_ROLE_KEY` are in the Vercel project.
 - Add `@supabase/supabase-js` + `@supabase/ssr`; create server + browser clients.
-- Idempotent seed script loading `SEED_*` into the DB (seed == the real league).
+- Apply `supabase/schema.sql` (already includes the `winner` column). The session
+  may not have the DB credentials locally (they live in Vercel) — either
+  `vercel env pull` them into `.env.local`, or paste `supabase/schema.sql` into the
+  Supabase dashboard **SQL editor**.
+- Idempotent **seed** loading `SEED_*` (managers, squad_assets, matches,
+  scoring_rules, seed events/adjustments) into the DB — seed == the real league.
+  Prefer an admin-triggered seed **route** (uses the server service-role key) so no
+  local DB credentials are needed; a `scripts/` seed is fine if creds are pulled.
 
 ### Phase 1 — Server-side ingestion (the actual fix)
 - New cron route `/api/cron/ingest` (scheduled in `vercel.json`): fetch ESPN → run
@@ -91,10 +99,9 @@ reads the same data.
 - No user-data migration needed (DB seeds from code; cron backfills results).
 - Update README.
 
-## Decisions (defaults chosen unless changed)
-- **Admin auth:** shared passphrase (env secret) for v1. Alt: Supabase Auth
-  magic-link + email allowlist.
-- **Live updates:** poll a server snapshot for v1. Alt: Supabase Realtime.
+## Decisions (confirmed for v1)
+- **Admin auth:** shared passphrase (env secret) gating admin server actions.
+- **Live updates:** poll a server snapshot endpoint. (Supabase Realtime later.)
 
 ## Effort / risk / rollback
 - ~2–4 days across phases; each ships independently.
@@ -102,6 +109,7 @@ reads the same data.
   additive; pure scoring logic (and its 80 tests) is unchanged.
 - Rollback: flip the flag / Vercel Instant Rollback. Nothing destructive.
 
-## Unblock
-Phase 0's provisioning is the only step I can't do from here. Add the Vercel →
-Supabase integration on the project, then I can build and deploy Phases 0–1.
+## Status
+Supabase is **provisioned** (env vars in Vercel). Ready to build Phases 0–1 on
+this branch (`claude/supabase-backend`). Keep the live app untouched behind the
+`NEXT_PUBLIC_USE_SUPABASE` flag until cutover.
