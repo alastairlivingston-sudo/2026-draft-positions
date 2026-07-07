@@ -141,6 +141,18 @@ describe("computeMatchResultEvents", () => {
     expect(events.some((e) => e.type === "team_win" || e.type === "team_loss")).toBe(false);
   });
 
+  it("awards team_win/team_loss on a penalty-shootout result (level score + winner)", () => {
+    // Knockout tie level after ET, decided on penalties: goals read 1-1 but
+    // ESPN flags the winner, so the shootout winner must still get team_win.
+    const shootout: Match = { ...baseMatch, homeScore: 1, awayScore: 1, winner: "away" };
+    const events = computeMatchResultEvents(shootout, squadAssets);
+    expect(events.filter((e) => e.assetId === moroccoTeam.id).map((e) => e.type)).toContain("team_win");
+    expect(events.filter((e) => e.assetId === franceTeam.id).map((e) => e.type)).toContain("team_loss");
+    // No 3+ or clean-sheet noise, and the detail notes it was on penalties.
+    expect(events.some((e) => e.type === "team_scored_3plus" || e.type === "clean_sheet")).toBe(false);
+    expect(events.find((e) => e.type === "team_win")?.detail).toContain("on penalties");
+  });
+
   it("does not award a clean sheet to a GK/Defender listed in nonPlayingAssetIds", () => {
     const events = computeMatchResultEvents(baseMatch, squadAssets, new Set([franceDefender.id]));
     expect(events.some((e) => e.assetId === franceDefender.id)).toBe(false);

@@ -46,6 +46,13 @@ export interface Match {
   awayScore: number | null;
   /** Minutes played, only meaningful while status === "live". */
   minute: number | null;
+  /**
+   * Which side actually won, when it can't be inferred from the score alone —
+   * i.e. a knockout tie level after extra time and decided on penalties. null
+   * for an unfinished match or a genuine draw (group stage). Lets result
+   * scoring award a shootout winner the team_win their goal tally hides.
+   */
+  winner?: "home" | "away" | null;
   venue: string;
   /** True once an admin has reviewed/locked this match's events. */
   locked: boolean;

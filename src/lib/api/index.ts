@@ -6,20 +6,27 @@ import { mockProvider } from "./mock-provider";
 import type { ApiProvider } from "./types";
 
 /**
- * True unless `NEXT_PUBLIC_USE_MOCK_DATA=false` - i.e. whenever
+ * True only when `NEXT_PUBLIC_USE_MOCK_DATA=true` - i.e. whenever
  * `getApiProvider()` would return the mock provider.
+ *
+ * Live ESPN data is the default now that the tournament is underway: mock mode
+ * froze at the seeded group stage and never surfaced dynamically-discovered
+ * knockout fixtures (and their team_win/loss bonuses). Set
+ * `NEXT_PUBLIC_USE_MOCK_DATA=true` to opt back into the scripted seed data for
+ * local development or a demo. If ESPN is unreachable the provider falls back
+ * to the seed schedule anyway, so live-by-default can't be worse than mock.
  */
 export function isMockMode(): boolean {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "false";
+  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true";
 }
 
 /**
  * Returns the active sports-data provider.
  *
- * Defaults to the mock provider so the app works with zero
- * configuration. Set `NEXT_PUBLIC_USE_MOCK_DATA=false` to switch to
- * `EspnProvider`, which pulls live World Cup 2026 scores/events from
- * ESPN's free public scoreboard API - no key required.
+ * Defaults to `EspnProvider`, which pulls live World Cup 2026
+ * scores/events from ESPN's free public scoreboard API - no key
+ * required. Set `NEXT_PUBLIC_USE_MOCK_DATA=true` to use the scripted
+ * seed data instead (local dev / demo).
  *
  * If `API_FOOTBALL_KEY` is set *and* `FIXTURE_ID_MAP` has been
  * populated, the legacy `ApiFootballProvider` is used instead (see

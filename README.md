@@ -61,7 +61,7 @@ has a working default:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NEXT_PUBLIC_USE_MOCK_DATA` | `true` | Set to `false` to pull live scores/events from ESPN's free public API instead of the scripted mock data. |
+| `NEXT_PUBLIC_USE_MOCK_DATA` | `false` | Live ESPN scores/events are the default. Set to `true` to use the scripted mock/seed data instead (local dev / demo). |
 | `API_FOOTBALL_KEY` | _(none)_ | Optional legacy provider ([API-Football](https://www.api-football.com/)) - if set alongside `NEXT_PUBLIC_USE_MOCK_DATA=false`, used instead of the default ESPN provider. Its free tier doesn't cover the 2026 World Cup. |
 | `LIVE_DATA_CACHE_SECONDS` | `3600` | How long `/api/live` caches the upstream provider response, shared across all clients, so the live provider is only hit once per cache window regardless of how many browsers are open. |
 | `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | How often the browser polls `/api/live`, in ms. Only affects UI freshness - the upstream call is cached per `LIVE_DATA_CACHE_SECONDS` above. |

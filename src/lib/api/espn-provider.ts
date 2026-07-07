@@ -17,7 +17,20 @@ const STATE_MAP: Record<string, MatchStatus> = {
 export interface EspnCompetitor {
   homeAway: "home" | "away";
   score?: string;
+  /** ESPN flags the actual winner even when the goal score is level (a
+   *  penalty-shootout result), so we can award the right team_win. */
+  winner?: boolean;
   team?: { displayName: string };
+}
+
+/** Which side ESPN marks as the winner, for shootout ties the score hides. */
+function resolveWinner(
+  home: EspnCompetitor | undefined,
+  away: EspnCompetitor | undefined,
+): "home" | "away" | null {
+  if (home?.winner) return "home";
+  if (away?.winner) return "away";
+  return null;
 }
 
 export interface EspnEvent {
@@ -151,12 +164,18 @@ export function resolveSquadCountry(espnDisplayName: string | undefined): string
   return ESPN_COUNTRY_NAME_ALIASES[normalized] ?? NORMALIZED_SQUAD_COUNTRIES.get(normalized);
 }
 
-/** ESPN's season.slug values for knockout rounds, mapped to display labels. */
+/** ESPN's season.slug values for knockout rounds, mapped to display labels.
+ *  Keys must match ESPN's actual slugs exactly - the live feed uses the plural
+ *  "quarterfinals"/"semifinals" and "3rd-place-match", not the singular forms;
+ *  singular aliases are kept too in case ESPN varies them. */
 const STAGE_LABELS: Record<string, string> = {
   "round-of-32": "Round of 32",
   "round-of-16": "Round of 16",
+  quarterfinals: "Quarter-final",
   quarterfinal: "Quarter-final",
+  semifinals: "Semi-final",
   semifinal: "Semi-final",
+  "3rd-place-match": "Third-place playoff",
   "third-place": "Third-place playoff",
   final: "Final",
 };
@@ -210,6 +229,7 @@ export function discoverDynamicMatches(events: EspnEvent[]): Match[] {
       homeScore: isUpcoming ? null : Number(home.score ?? 0),
       awayScore: isUpcoming ? null : Number(away.score ?? 0),
       minute: isUpcoming ? null : Math.floor(comp.status.clock / 60),
+      winner: isUpcoming ? null : resolveWinner(home, away),
       venue: comp.venue?.fullName ?? "",
       locked: false,
     });
@@ -555,6 +575,7 @@ export class EspnProvider implements ApiProvider {
         homeScore: isUpcoming ? null : Number(home?.score ?? 0),
         awayScore: isUpcoming ? null : Number(away?.score ?? 0),
         minute: isUpcoming ? null : Math.floor(comp.status.clock / 60),
+        winner: isUpcoming ? null : resolveWinner(home, away),
       };
     });
 

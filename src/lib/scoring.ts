@@ -152,18 +152,31 @@ export function computeMatchResultEvents(
   if (match.homeScore === null || match.awayScore === null) return [];
 
   const sides = [
-    { team: match.homeTeam, scored: match.homeScore, conceded: match.awayScore },
-    { team: match.awayTeam, scored: match.awayScore, conceded: match.homeScore },
+    { team: match.homeTeam, scored: match.homeScore, conceded: match.awayScore, side: "home" as const },
+    { team: match.awayTeam, scored: match.awayScore, conceded: match.homeScore, side: "away" as const },
   ];
 
   const events: RawApiEvent[] = [];
   for (const side of sides) {
+    // A knockout tie level after extra time is decided on penalties; the goal
+    // score reads as a draw, so fall back to match.winner to award the win/loss.
+    const wonByShootout = side.scored === side.conceded && match.winner === side.side;
+    const lostByShootout =
+      side.scored === side.conceded && match.winner != null && match.winner !== side.side;
+    const won = side.scored > side.conceded || wonByShootout;
+    const lost = side.scored < side.conceded || lostByShootout;
     for (const asset of squadAssets.filter((a) => a.country === side.team)) {
       if (asset.assetType === "team") {
-        if (side.scored > side.conceded) {
-          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_win", minute: 90, detail: `${side.team} win ${side.scored}-${side.conceded}` });
-        } else if (side.scored < side.conceded) {
-          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_loss", minute: 90, detail: `${side.team} lose ${side.scored}-${side.conceded}` });
+        if (won) {
+          const detail = wonByShootout
+            ? `${side.team} win ${side.scored}-${side.conceded} on penalties`
+            : `${side.team} win ${side.scored}-${side.conceded}`;
+          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_win", minute: 90, detail });
+        } else if (lost) {
+          const detail = lostByShootout
+            ? `${side.team} lose ${side.scored}-${side.conceded} on penalties`
+            : `${side.team} lose ${side.scored}-${side.conceded}`;
+          events.push({ fixtureId: match.id, assetId: asset.id, type: "team_loss", minute: 90, detail });
         }
         if (side.scored >= 3) {
           events.push({ fixtureId: match.id, assetId: asset.id, type: "team_scored_3plus", minute: 90, detail: `${side.team} score ${side.scored}` });
