@@ -91,6 +91,7 @@ src/
     api/cron/ingest/route.ts     # scheduled Supabase ingest (see docs/supabase-migration.md)
     api/admin/seed/route.ts      # idempotent Supabase seed load
     api/admin/refresh/route.ts   # on-demand Supabase ingest trigger
+    api/league-snapshot/route.ts # read-only Supabase snapshot (Phase 2 shared reads)
   components/
     leaderboard/, events/, matches/, squad/, admin/, shared/, ui/
   lib/
@@ -102,7 +103,8 @@ src/
     data/espn-fixture-map.ts  # SEED_MATCHES id -> ESPN event id mapping
     data/api-football-mapping.ts  # legacy fixture/player ID map for API-Football mode
     api/                       # mock, ESPN and API-Football provider adapters
-    hooks/use-live-polling.ts  # polls match status + live events
+    hooks/use-live-polling.ts  # polls match status + live events (ESPN-derived path)
+    hooks/use-supabase-snapshot-polling.ts  # polls the Supabase snapshot (shared-reads path)
     supabase/                  # Supabase clients + row<->domain mappers (see docs/supabase-migration.md)
     server/                    # server-only helpers (admin auth, live-data ingest)
 supabase/schema.sql          # Supabase schema for a future backend

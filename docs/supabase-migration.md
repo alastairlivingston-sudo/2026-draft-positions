@@ -53,10 +53,15 @@ all writes go through the service-role key from trusted server code.
   replacing the per-browser `apiEventCache`. `POST /api/admin/refresh` is
   the same pipeline triggered on demand. Both no-op while
   `NEXT_PUBLIC_USE_SUPABASE` is off.
-- **Phase 2 - shared reads**: swap the leaderboard/matches/events/manager
-  pages from reading the Zustand store to reading Supabase (server
-  components or a thin client hook), still behind the flag, so every
-  device sees the same live state.
+- **Phase 2 - shared reads** (`/api/league-snapshot`,
+  `useSupabaseSnapshotPolling`, `hydrateFromSnapshot`): rather than
+  rewriting every page's data access, `LivePollingProvider` now polls a
+  read-only Supabase snapshot route and replaces the store's data
+  wholesale (Supabase is already the single source of truth, so no
+  client-side merge/derive needed) when the flag is on, in place of the
+  ESPN-derived `useLivePolling`/`syncMatches`/`ingestApiEvents` path.
+  Every page still reads from `useLeagueStore` unchanged - only *how* it
+  gets populated differs.
 - **Phase 3 - admin writes + auth**: move the admin dashboard's mutating
   actions (events, adjustments, scoring rules, match corrections, squad
   mapping) from Zustand store actions to server actions/routes backed by
@@ -71,6 +76,6 @@ all writes go through the service-role key from trusted server code.
 
 - [x] Phase 0
 - [x] Phase 1
-- [ ] Phase 2
+- [x] Phase 2
 - [ ] Phase 3
 - [ ] Phase 4
