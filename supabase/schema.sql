@@ -53,6 +53,10 @@ create table if not exists matches (
   home_score integer,
   away_score integer,
   minute integer,
+  -- Which side actually won when it can't be inferred from the score alone
+  -- (a knockout tie decided on penalties) - mirrors Match.winner in
+  -- src/lib/types.ts. Null for an unfinished match or a genuine draw.
+  winner text check (winner in ('home', 'away')),
   venue text not null,
   locked boolean not null default false
 );

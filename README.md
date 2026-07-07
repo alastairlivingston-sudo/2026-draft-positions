@@ -65,8 +65,12 @@ has a working default:
 | `API_FOOTBALL_KEY` | _(none)_ | Optional legacy provider ([API-Football](https://www.api-football.com/)) - if set alongside `NEXT_PUBLIC_USE_MOCK_DATA=false`, used instead of the default ESPN provider. Its free tier doesn't cover the 2026 World Cup. |
 | `LIVE_DATA_CACHE_SECONDS` | `3600` | How long `/api/live` caches the upstream provider response, shared across all clients, so the live provider is only hit once per cache window regardless of how many browsers are open. |
 | `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | How often the browser polls `/api/live`, in ms. Only affects UI freshness - the upstream call is cached per `LIVE_DATA_CACHE_SECONDS` above. |
-| `NEXT_PUBLIC_SUPABASE_URL` | _(none)_ | For a future Supabase-backed store (see `supabase/schema.sql`). |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | _(none)_ | Same as above. |
+| `NEXT_PUBLIC_SUPABASE_URL` | _(none)_ | Supabase project URL (see `supabase/schema.sql`). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | _(none)_ | Supabase anon/public key - RLS restricts it to read-only. |
+| `SUPABASE_SERVICE_ROLE_KEY` | _(none)_ | Supabase service-role key - server-only, used by the seed/ingest routes to bypass RLS for writes. Never expose to the client. |
+| `NEXT_PUBLIC_USE_SUPABASE` | `false` | Master switch for the Supabase-backed store. Off by default so the existing localStorage/Zustand app keeps working until the migration reaches cutover. |
+| `ADMIN_SECRET` | _(none)_ | Shared passphrase required (as an `x-admin-secret` header) to call `/api/admin/seed` and `/api/admin/refresh`. |
+| `CRON_SECRET` | _(none)_ | Required by Vercel Cron to call `/api/cron/ingest` (sent as `Authorization: Bearer $CRON_SECRET`, per Vercel's convention). |
 
 ## Project structure
 
@@ -84,6 +88,9 @@ src/
       cast/                  # full-screen cast mode (no nav)
       layout.tsx             # live-polling provider
     api/live/route.ts       # cached live-data endpoint (see "Live data")
+    api/cron/ingest/route.ts     # scheduled Supabase ingest (see docs/supabase-migration.md)
+    api/admin/seed/route.ts      # idempotent Supabase seed load
+    api/admin/refresh/route.ts   # on-demand Supabase ingest trigger
   components/
     leaderboard/, events/, matches/, squad/, admin/, shared/, ui/
   lib/
@@ -96,6 +103,8 @@ src/
     data/api-football-mapping.ts  # legacy fixture/player ID map for API-Football mode
     api/                       # mock, ESPN and API-Football provider adapters
     hooks/use-live-polling.ts  # polls match status + live events
+    supabase/                  # Supabase clients + row<->domain mappers (see docs/supabase-migration.md)
+    server/                    # server-only helpers (admin auth, live-data ingest)
 supabase/schema.sql          # Supabase schema for a future backend
 ```
 
