@@ -21,6 +21,12 @@ import {
   SEED_SQUAD_ASSETS,
 } from "@/lib/data/seed";
 
+export interface SeedResult {
+  ok?: true;
+  error?: string;
+  steps: { table: string; count: number }[];
+}
+
 /**
  * Idempotent one-time load of the curated seed data into Supabase - this
  * *is* the real league (managers, squads, match schedule, curated events),

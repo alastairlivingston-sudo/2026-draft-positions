@@ -7,6 +7,7 @@ import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
 import { AdminMappingTab } from "@/components/admin/admin-mapping-tab";
 import { AdminMatchesTab } from "@/components/admin/admin-matches-tab";
 import { AdminScoringTab } from "@/components/admin/admin-scoring-tab";
+import { AdminSeedButton } from "@/components/admin/admin-seed-button";
 import { AdminSupabaseRefresh } from "@/components/admin/admin-supabase-refresh";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -21,6 +22,7 @@ export function AdminDashboard() {
         <AdminLogoutButton />
       </div>
 
+      <AdminSeedButton />
       <AdminSupabaseRefresh />
 
       <Tabs defaultValue="events">

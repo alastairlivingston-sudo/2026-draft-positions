@@ -57,7 +57,8 @@ in sync with ESPN.
 
 5. Seed the database once - this loads the real league (managers,
    squads, match schedule, curated historical events) from
-   `src/lib/data/seed.ts`:
+   `src/lib/data/seed.ts`. Either log into `/league/world-cup-draft/admin`
+   with `ADMIN_SECRET` and click "Seed database" (no terminal needed), or:
 
    ```bash
    curl -X POST http://localhost:3000/api/admin/seed -H "x-admin-secret: $ADMIN_SECRET"
