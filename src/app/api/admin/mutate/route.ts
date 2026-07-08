@@ -19,9 +19,9 @@ export async function POST(request: Request) {
   }
 
   const body: AdminActionRequest = await request.json();
-  const supabase = createSupabaseAdminClient();
 
   try {
+    const supabase = createSupabaseAdminClient();
     const before = await fetchLeagueDataFromSupabase(supabase);
     const after = applyAdminAction(before, body, DEFAULT_ADMIN_ACTOR);
     if (!after) return NextResponse.json({ ok: true, noop: true });

@@ -1,6 +1,7 @@
 "use client";
 
 import { MatchCard } from "@/components/matches/match-card";
+import { useLeagueActions } from "@/lib/hooks/use-league-actions";
 import { getMatchAssets } from "@/lib/selectors";
 import { useLeagueStore } from "@/lib/store/league-store";
 import type { MatchStatus } from "@/lib/types";
@@ -9,7 +10,7 @@ const STATUS_ORDER: Record<MatchStatus, number> = { live: 0, upcoming: 1, comple
 
 export function MatchesView() {
   const data = useLeagueStore((s) => s);
-  const toggleMatchLock = useLeagueStore((s) => s.toggleMatchLock);
+  const { toggleMatchLock } = useLeagueActions();
 
   const matches = data.matches.slice().sort((a, b) => {
     const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];

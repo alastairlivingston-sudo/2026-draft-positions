@@ -38,10 +38,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = createSupabaseAdminClient();
   const steps: { table: string; count: number }[] = [];
 
   try {
+    const supabase = createSupabaseAdminClient();
     const managers = SEED_MANAGERS.map(managerToRow);
     if (managers.length > 0) {
       const { error } = await supabase.from("managers").upsert(managers);

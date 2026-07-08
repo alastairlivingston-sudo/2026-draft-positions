@@ -9,11 +9,9 @@ import type { LeagueData } from "@/lib/selectors";
 const DEFAULT_INTERVAL_MS = 60_000;
 
 /**
- * Supabase-backed counterpart of useLivePolling: polls /api/league-snapshot
- * (the DB rows the cron/admin-refresh ingest already wrote) and replaces the
- * store's data wholesale via hydrateFromSnapshot, instead of deriving
- * events from ESPN client-side. Active only when NEXT_PUBLIC_USE_SUPABASE
- * is on - see LivePollingProvider.
+ * Polls /api/league-snapshot (the DB rows the cron/admin-refresh ingest
+ * already wrote) and replaces the store's data wholesale via
+ * hydrateFromSnapshot - see LivePollingProvider.
  */
 export function useSupabaseSnapshotPolling(intervalMs?: number): LiveStatus {
   const hydrateFromSnapshot = useLeagueStore((state) => state.hydrateFromSnapshot);

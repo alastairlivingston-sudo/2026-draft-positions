@@ -8,12 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * Passphrase gate for the admin dashboard, active only when
- * NEXT_PUBLIC_USE_SUPABASE is on - the shared-passphrase auth model isn't
- * needed for the existing open-access localStorage mode. Checks
- * /api/admin/session on mount; on failure, shows a form that POSTs to
- * /api/admin/login and sets an httpOnly session cookie for subsequent
- * admin mutate calls (see useLeagueActions).
+ * Passphrase gate for the admin dashboard. Checks /api/admin/session on
+ * mount; on failure, shows a form that POSTs to /api/admin/login and sets
+ * an httpOnly session cookie for subsequent admin mutate calls (see
+ * useLeagueActions).
  */
 export function AdminGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<"loading" | "authed" | "unauthed">("loading");

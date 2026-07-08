@@ -6,9 +6,7 @@ import { isCronRequestAuthorized } from "@/lib/server/route-auth";
 /**
  * Scheduled entry point (see vercel.json's `crons`) for the Supabase-backed
  * live-data pipeline - fetches ESPN, derives events server-side, and
- * upserts into the shared Supabase tables. Replaces the old per-browser
- * ingestApiEvents/syncMatches flow once NEXT_PUBLIC_USE_SUPABASE is on;
- * ingestLiveData() itself no-ops while that flag is off.
+ * upserts into the shared Supabase tables that every viewer's browser reads.
  */
 export async function GET(request: Request) {
   if (!isCronRequestAuthorized(request)) {

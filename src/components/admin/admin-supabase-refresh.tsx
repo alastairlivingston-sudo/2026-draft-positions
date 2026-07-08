@@ -10,10 +10,9 @@ import type { IngestResult } from "@/lib/server/ingest-live-data";
 /**
  * On-demand trigger for /api/admin/refresh (the same ESPN-to-Supabase
  * ingest the cron job runs on a schedule) - for an admin who doesn't want
- * to wait for the next tick. Only rendered when NEXT_PUBLIC_USE_SUPABASE
- * is on (see AdminDashboard). v1 auth is a shared passphrase (env var,
- * not yet wired into a login/session - see the Phase 2 plan), so this
- * prompts for it per click rather than assuming a session exists.
+ * to wait for the next tick. Uses the one-off `x-admin-secret` header
+ * (prompted per click) rather than the dashboard's login session, since
+ * it's called rarely - see /api/admin/mutate for the frequently-called path.
  */
 export function AdminSupabaseRefresh() {
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -52,9 +51,9 @@ export function AdminSupabaseRefresh() {
       </div>
       {status === "done" && result && (
         <Alert>
-          <AlertTitle>{result.skipped ? "Skipped" : "Done"}</AlertTitle>
+          <AlertTitle>Done</AlertTitle>
           <AlertDescription>
-            {result.skipped ?? `Matches upserted: ${result.matchesUpserted}, result events: ${result.resultEventsUpserted}, live events: ${result.liveEventsUpserted} (source: ${result.source})`}
+            {`Matches upserted: ${result.matchesUpserted}, result events: ${result.resultEventsUpserted}, live events: ${result.liveEventsUpserted} (source: ${result.source})`}
           </AlertDescription>
         </Alert>
       )}

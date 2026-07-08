@@ -19,8 +19,8 @@ export function LeaderboardCard({ row }: LeaderboardCardProps) {
   const { manager, rank, rankChange, total, change, bestAsset, remainingAssets, squadSize } = row;
 
   // Briefly highlight the card when a live update changes this manager's
-  // total - but not for the initial render or the localStorage rehydration
-  // that follows it.
+  // total - but not for the initial render or the Supabase snapshot
+  // hydration that follows it.
   const prevTotal = useRef(total);
   const readyRef = useRef(false);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);

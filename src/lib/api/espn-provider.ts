@@ -584,15 +584,14 @@ export class EspnProvider implements ApiProvider {
 
   async getLiveEvents(matches: Match[]): Promise<RawApiEvent[]> {
     // Includes "completed" matches, not just "live" ones: if a match's
-    // entire live window falls inside a single /api/live cache window (see
-    // LIVE_DATA_CACHE_SECONDS in src/app/api/live/route.ts), or nobody
-    // polls while it's live, its goal/assist/card key-events would
-    // otherwise never be fetched - only the final-score-derived bonuses
-    // (clean sheet, team result, computed locally in
-    // computeMatchResultEvents) would land, silently dropping individual
-    // player events. Re-fetching for already-processed completed matches
-    // is safe and cheap: ingestApiEvents dedupes by event hash, so this
-    // is purely a self-healing backfill, not a source of double-counting.
+    // entire live window falls between two cron ticks (see vercel.json),
+    // its goal/assist/card key-events would otherwise never be fetched -
+    // only the final-score-derived bonuses (clean sheet, team result,
+    // computed locally in computeMatchResultEvents) would land, silently
+    // dropping individual player events. Re-fetching for already-processed
+    // completed matches is safe and cheap: the ingest job dedupes by event
+    // hash (see src/lib/server/ingest-live-data.ts), so this is purely a
+    // self-healing backfill, not a source of double-counting.
     const relevantMatches = matches.filter(
       (m) => (m.status === "live" || m.status === "completed") && resolveEspnId(m.id) !== undefined,
     );

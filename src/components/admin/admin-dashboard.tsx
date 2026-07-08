@@ -18,10 +18,10 @@ export function AdminDashboard() {
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Admin Dashboard</h1>
           <p className="text-sm text-muted-foreground">Manage events, adjustments, scoring rules, matches and squad mapping</p>
         </div>
-        {process.env.NEXT_PUBLIC_USE_SUPABASE === "true" && <AdminLogoutButton />}
+        <AdminLogoutButton />
       </div>
 
-      {process.env.NEXT_PUBLIC_USE_SUPABASE === "true" && <AdminSupabaseRefresh />}
+      <AdminSupabaseRefresh />
 
       <Tabs defaultValue="events">
         <div className="overflow-x-auto">

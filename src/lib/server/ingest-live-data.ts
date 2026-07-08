@@ -2,13 +2,11 @@ import "server-only";
 
 import { getApiProvider, isMockMode } from "@/lib/api";
 import { computeMatchResultEvents, DEFAULT_SCORING_VALUES, materializeFantasyEvents, RESULT_EVENT_TYPES } from "@/lib/scoring";
-import { isSupabaseEnabled } from "@/lib/supabase/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { fantasyEventToRow, matchFromRow, matchToRow, scoringValuesFromRow, squadAssetFromRow } from "@/lib/supabase/mappers";
 import type { Match, RawApiEvent } from "@/lib/types";
 
 export interface IngestResult {
-  skipped?: string;
   source?: "mock" | "api";
   matchesUpserted: number;
   resultEventsUpserted: number;
@@ -16,25 +14,15 @@ export interface IngestResult {
 }
 
 /**
- * Server-side counterpart of the client store's syncMatches/ingestApiEvents
- * (src/lib/store/league-store.ts), but writing to the shared Supabase
- * tables instead of one browser's localStorage. Fetches the live provider
- * once, merges match status/score into `matches`, and derives + upserts
- * both result-based events (clean sheets, team bonuses - recomputed fresh
- * for every completed, unlocked match, same rationale as syncMatches) and
+ * Fetches the live provider once, merges match status/score into
+ * `matches`, and derives + upserts both result-based events (clean sheets,
+ * team bonuses - recomputed fresh for every completed, unlocked match) and
  * live keyEvents-based events (goals, cards, assists) into `fantasy_events`,
- * deduped by the table's `event_hash` unique constraint instead of a
- * per-browser cache.
- *
- * No-ops entirely while NEXT_PUBLIC_USE_SUPABASE is off, so the scheduled
- * cron and the admin "refresh now" trigger are inert until the backend is
- * actually cut over.
+ * deduped by the table's `event_hash` unique constraint. This is the
+ * league's single source of truth - every viewer's browser reads the rows
+ * this writes via /api/league-snapshot, rather than deriving events itself.
  */
 export async function ingestLiveData(): Promise<IngestResult> {
-  if (!isSupabaseEnabled()) {
-    return { skipped: "Supabase backend disabled (NEXT_PUBLIC_USE_SUPABASE is not \"true\")", matchesUpserted: 0, resultEventsUpserted: 0, liveEventsUpserted: 0 };
-  }
-
   const supabase = createSupabaseAdminClient();
 
   const [{ data: matchRows, error: matchesError }, { data: assetRows, error: assetsError }, { data: scoringRow, error: scoringError }] =

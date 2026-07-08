@@ -309,7 +309,7 @@ describe("EspnProvider.getLiveEvents", () => {
   // m22: Ghana vs Panama - Mohammed Kudus (saul-5) scores, assisted by
   // Jordan Ayew (jamie-1). Regression test for a bug where a match that
   // went straight from "live" to "completed" between polls (e.g. its
-  // entire live window fell inside one /api/live cache window) never had
+  // entire live window fell between two cron ticks) never had
   // its goal/assist key-events fetched at all, silently dropping the
   // points - only the final-score-derived bonuses still landed.
   const m22 = SEED_MATCHES.find((m) => m.id === "m22")!;

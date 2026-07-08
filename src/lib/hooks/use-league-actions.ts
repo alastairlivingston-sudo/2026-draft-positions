@@ -1,22 +1,8 @@
 "use client";
 
 import { useLiveStatus } from "@/lib/contexts/live-status-context";
-import { useLeagueStore, type LeagueStore } from "@/lib/store/league-store";
-import type { AdminActionRequest } from "@/lib/store/mutations";
-
-type LeagueActions = Pick<
-  LeagueStore,
-  | "addFantasyEvent"
-  | "updateFantasyEvent"
-  | "deleteFantasyEvent"
-  | "addManualAdjustment"
-  | "deleteManualAdjustment"
-  | "updateScoringValues"
-  | "recalculateAllPoints"
-  | "toggleMatchLock"
-  | "updateMatchResult"
-  | "updateSquadAsset"
->;
+import type { AddAdjustmentInput, AddEventInput, AdminActionRequest, UpdateEventInput } from "@/lib/store/mutations";
+import type { Match, ScoringValues, SquadAsset } from "@/lib/types";
 
 async function callMutate(action: AdminActionRequest["action"], args: unknown[]): Promise<void> {
   const res = await fetch("/api/admin/mutate", {
@@ -28,36 +14,33 @@ async function callMutate(action: AdminActionRequest["action"], args: unknown[])
   if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
 }
 
+export interface LeagueActions {
+  addFantasyEvent: (input: AddEventInput) => void;
+  updateFantasyEvent: (id: string, patch: UpdateEventInput, reason: string) => void;
+  deleteFantasyEvent: (id: string, reason: string) => void;
+  addManualAdjustment: (input: AddAdjustmentInput) => void;
+  deleteManualAdjustment: (id: string, reason: string) => void;
+  updateScoringValues: (values: ScoringValues, mode: "forward" | "recalculate") => void;
+  recalculateAllPoints: () => void;
+  toggleMatchLock: (matchId: string) => void;
+  updateMatchResult: (matchId: string, patch: Partial<Pick<Match, "status" | "homeScore" | "awayScore" | "minute">>) => void;
+  updateSquadAsset: (
+    id: string,
+    patch: Partial<Pick<SquadAsset, "name" | "country" | "position" | "assetType" | "unavailable">>,
+  ) => void;
+}
+
 /**
- * Returns the admin dashboard's write actions with the exact same
- * signatures as the Zustand store's (see league-store.ts), so the six
- * admin tab components don't need separate Supabase-aware code paths.
- * When NEXT_PUBLIC_USE_SUPABASE is on, each action instead POSTs to
- * /api/admin/mutate (dispatching to the matching apply* function in
- * src/lib/store/mutations.ts against Supabase) and triggers an immediate
- * snapshot re-poll so the change shows up without waiting for the next
- * interval; failures are surfaced with an alert since these actions have
- * no other error-handling UI. Otherwise it returns the store's own actions
- * unchanged.
+ * The admin dashboard's (and the public Match Centre's lock toggle) write
+ * actions - every one POSTs to /api/admin/mutate, which dispatches to the
+ * matching apply* function in src/lib/store/mutations.ts against Supabase,
+ * then triggers an immediate snapshot re-poll so the change is visible
+ * without waiting for the next interval. Failures are surfaced with an
+ * alert since these actions have no other error-handling UI - e.g. a
+ * viewer who hasn't logged in via /admin trying to toggle a match lock.
  */
 export function useLeagueActions(): LeagueActions {
-  const store = useLeagueStore();
   const { refresh } = useLiveStatus();
-
-  if (process.env.NEXT_PUBLIC_USE_SUPABASE !== "true") {
-    return {
-      addFantasyEvent: store.addFantasyEvent,
-      updateFantasyEvent: store.updateFantasyEvent,
-      deleteFantasyEvent: store.deleteFantasyEvent,
-      addManualAdjustment: store.addManualAdjustment,
-      deleteManualAdjustment: store.deleteManualAdjustment,
-      updateScoringValues: store.updateScoringValues,
-      recalculateAllPoints: store.recalculateAllPoints,
-      toggleMatchLock: store.toggleMatchLock,
-      updateMatchResult: store.updateMatchResult,
-      updateSquadAsset: store.updateSquadAsset,
-    };
-  }
 
   function run(action: AdminActionRequest["action"], args: unknown[]) {
     callMutate(action, args)
