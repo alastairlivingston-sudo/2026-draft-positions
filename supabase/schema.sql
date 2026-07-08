@@ -1,12 +1,10 @@
 -- World Cup Draft Fantasy League - Supabase schema
 --
--- Mirrors the shapes in src/lib/types.ts and src/lib/selectors.ts so the
--- mocked Zustand store (src/lib/store/league-store.ts) can be swapped for
--- Supabase-backed reads/writes without changing the app's data model.
---
--- The MVP runs entirely on local seed data + localStorage and does not
--- require this schema. Apply it when you're ready to move to a shared,
--- multi-device backend (see README "Next improvements").
+-- Mirrors the shapes in src/lib/types.ts and src/lib/selectors.ts - this
+-- is the live, shared source of truth (see docs/supabase-migration.md),
+-- not an optional/future backend. Apply via the Supabase SQL editor;
+-- there's no migration runner, so schema changes after the initial apply
+-- need a manual ALTER statement against the existing database too.
 
 -- ============================================================
 -- managers
@@ -32,6 +30,9 @@ create table if not exists squad_assets (
   country_code text not null,
   position text not null check (position in ('Goalkeeper', 'Defender', 'Midfielder', 'Striker', 'Team')),
   asset_type text not null check (asset_type in ('player', 'team')),
+  -- Manually flagged by an admin as unavailable (injury, squad omission,
+  -- etc) - mirrors SquadAsset.unavailable in src/lib/types.ts.
+  unavailable boolean not null default false,
   created_at timestamptz not null default now(),
   unique (manager_id, slot)
 );
@@ -141,8 +142,10 @@ create table if not exists audit_log (
   id text primary key,
   action text not null check (action in (
     'create_event', 'update_event', 'delete_event',
-    'manual_adjustment', 'update_scoring_rules', 'recalculate_points',
-    'lock_match', 'unlock_match'
+    'manual_adjustment', 'delete_adjustment',
+    'update_scoring_rules', 'recalculate_points',
+    'lock_match', 'unlock_match',
+    'update_squad_asset', 'update_match'
   )),
   actor text not null,
   manager_id text references managers(id) on delete set null,
@@ -172,11 +175,12 @@ create table if not exists api_event_cache (
 -- Row Level Security
 --
 -- Everything is publicly readable (the league is a shareable
--- public link). Writes are expected to go through a server-side
--- role using the service key, gated by the app's admin-password
--- check (src/lib/auth.ts). When migrating to Supabase Auth, replace
--- the "service role only" write policies below with role-based
--- checks (e.g. auth.jwt() ->> 'role' = 'admin').
+-- public link). Writes go through a server-side role using the
+-- service key (the admin dashboard has no auth of its own - see
+-- docs/supabase-migration.md). If per-manager admin accounts are
+-- ever added via Supabase Auth, replace the "service role only"
+-- write policies below with role-based checks
+-- (e.g. auth.jwt() ->> 'role' = 'admin').
 -- ============================================================
 alter table managers enable row level security;
 alter table squad_assets enable row level security;
