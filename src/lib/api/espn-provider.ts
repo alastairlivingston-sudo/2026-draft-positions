@@ -584,7 +584,8 @@ export class EspnProvider implements ApiProvider {
 
   async getLiveEvents(matches: Match[]): Promise<RawApiEvent[]> {
     // Includes "completed" matches, not just "live" ones: if a match's
-    // entire live window falls between two cron ticks (see vercel.json),
+    // entire live window falls between two cron ticks (see
+    // .github/workflows/ingest-cron.yml),
     // its goal/assist/card key-events would otherwise never be fetched -
     // only the final-score-derived bonuses (clean sheet, team result,
     // computed locally in computeMatchResultEvents) would land, silently

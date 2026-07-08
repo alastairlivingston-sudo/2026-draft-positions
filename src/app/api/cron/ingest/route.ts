@@ -4,7 +4,7 @@ import { ingestLiveData } from "@/lib/server/ingest-live-data";
 import { isCronRequestAuthorized } from "@/lib/server/route-auth";
 
 /**
- * Scheduled entry point (see vercel.json's `crons`) for the Supabase-backed
+ * Scheduled entry point (see .github/workflows/ingest-cron.yml) for the Supabase-backed
  * live-data pipeline - fetches ESPN, derives events server-side, and
  * upserts into the shared Supabase tables that every viewer's browser reads.
  */

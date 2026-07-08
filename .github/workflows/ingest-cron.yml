@@ -1,0 +1,25 @@
+name: Ingest live data
+
+# Calls /api/cron/ingest on a schedule, outside of Vercel Cron - the Hobby
+# (free) plan only allows cron jobs to run once per day, which is too
+# infrequent for keeping scores live during matches. GitHub Actions has no
+# such restriction, so this is a drop-in replacement for a native
+# vercel.json cron. See docs/supabase-migration.md.
+#
+# Requires one repository secret: CRON_SECRET, matching the same-named env
+# var on the Vercel project (Settings -> Environment Variables).
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/ingest
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://2026-draft-positions.vercel.app/api/cron/ingest"

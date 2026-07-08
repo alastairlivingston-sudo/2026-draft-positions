@@ -55,8 +55,10 @@ entirely.
   (`POST /api/admin/seed`) that loads `SEED_*` from `src/lib/data/seed.ts`
   into Supabase - that seed data *is* the real league, not a demo fixture.
 - **Phase 1 - server-side ingestion** (`src/lib/server/ingest-live-data.ts`):
-  a scheduled cron (`GET /api/cron/ingest`, see `vercel.json`) fetches
-  ESPN, runs the existing result/event derivation
+  a scheduled cron (`GET /api/cron/ingest`, called every 5 minutes by
+  `.github/workflows/ingest-cron.yml` - not Vercel Cron, whose Hobby plan
+  only allows daily invocations) fetches ESPN, runs the existing
+  result/event derivation
   (`computeMatchResultEvents`, `calculateEventPoints`), and upserts
   `matches` + `fantasy_events` into Supabase, deduped via the
   `fantasy_events.event_hash` unique constraint - replacing the old

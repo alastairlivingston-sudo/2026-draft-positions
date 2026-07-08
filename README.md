@@ -78,9 +78,11 @@ httpOnly session cookie for subsequent admin actions (see
 ### Keeping data fresh
 
 `/api/cron/ingest` fetches ESPN, derives scoring events server-side, and
-upserts everything into Supabase - scheduled via `vercel.json`. Locally,
-or to refresh on demand without waiting for the cron, either call it
-directly or use the admin dashboard's "Refresh now" button:
+upserts everything into Supabase - scheduled every 5 minutes by a GitHub
+Actions workflow (`.github/workflows/ingest-cron.yml`), not Vercel Cron
+(the Hobby/free plan only allows daily cron invocations, too infrequent
+for live scores). To refresh on demand without waiting for the schedule,
+either call it directly or use the admin dashboard's "Refresh now" button:
 
 ```bash
 curl -X POST http://localhost:3000/api/admin/refresh -H "x-admin-secret: $ADMIN_SECRET"
@@ -168,7 +170,8 @@ to team rows - enforced in `src/lib/scoring.ts`.
 ## Live data
 
 `src/lib/server/ingest-live-data.ts` runs on a schedule
-(`/api/cron/ingest`, see `vercel.json`) and on demand (the admin
+(`/api/cron/ingest`, called every 5 minutes by
+`.github/workflows/ingest-cron.yml`) and on demand (the admin
 dashboard's "Refresh now", or `POST /api/admin/refresh`):
 
 1. Fetches the active provider's matches and merges status/score/minute
@@ -249,9 +252,11 @@ mapping, name/country normalization, and clean-sheet eligibility.
 3. Apply `supabase/schema.sql` via the Supabase SQL editor.
 4. Deploy, then seed once: `POST /api/admin/seed` with the
    `x-admin-secret` header.
-5. Vercel Cron (`vercel.json`) keeps data fresh automatically - note the
-   Hobby plan only allows daily crons; a more frequent schedule (the
-   default here is every 5 minutes) needs a Pro plan.
+5. Add a `CRON_SECRET` repository secret in GitHub (Settings -> Secrets
+   and variables -> Actions) matching the same env var in Vercel -
+   `.github/workflows/ingest-cron.yml` calls `/api/cron/ingest` every 5
+   minutes to keep data fresh (not Vercel Cron - the Hobby plan only
+   allows daily invocations, too infrequent for live scores).
 
 Share `https://<your-app>.vercel.app/league/world-cup-draft` with your
 league - the "Copy invite link", WhatsApp and QR code buttons on the
