@@ -101,6 +101,20 @@ entirely.
   happens server-side. Test coverage for the removed store logic moved
   to `src/lib/store/__tests__/mutations.test.ts`, testing the pure
   `apply*` functions directly instead of the old store actions.
+- **Post-cutover fixes**: two schema columns had drifted behind
+  `src/lib/types.ts` (`squad_assets.unavailable`, and three missing
+  `audit_log.action` check-constraint values) and broke seeding on a
+  fresh database - fixed in schema.sql, but an already-applied database
+  needs the equivalent `ALTER TABLE` run by hand (no migration runner).
+  Separately, the server-side ingest only deduped by `event_hash`,
+  which curated seed events don't have (`eventHash: null`) - a live
+  re-fetch of an event the seed already recorded landed as a second row
+  under a different hash, double-counting real matches' points. Fixed
+  by also deduping on `eventIdentityKey` (matchId, assetId, type,
+  minute) in both `ingest-live-data.ts` and
+  `applyUpdateMatchResult` - see `excludeEventsMatchingExisting` in
+  `scoring.ts`. `POST /api/admin/reset` (+ an "Clear all" dashboard
+  button) was added to recover from data affected by this before the fix.
 
 ## What's not covered
 

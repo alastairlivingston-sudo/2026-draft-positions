@@ -23,6 +23,7 @@ import {
 } from "@/lib/store/mutations";
 import { getAssetPoints, getManagerTotal, type LeagueData } from "@/lib/selectors";
 import { DEFAULT_SCORING_VALUES } from "@/lib/scoring";
+import type { FantasyEvent } from "@/lib/types";
 
 function seedData(): LeagueData {
   return {
@@ -202,6 +203,38 @@ describe("applyUpdateMatchResult", () => {
   it("returns null for an unknown match id", () => {
     const data = seedData();
     expect(applyUpdateMatchResult(data, "nope", { status: "completed" }, DEFAULT_ADMIN_ACTOR)).toBeNull();
+  });
+
+  it("does not duplicate a result event a curated seed event already covers for the same match/asset/type/minute", () => {
+    // Regression test: seed data can include a curated result event
+    // (source: "seed", eventHash: null) for a match an admin later
+    // corrects - the freshly-derived event must recognize it as the same
+    // real-world thing and skip it, not add a second copy under a new id.
+    const data = seedData();
+    const polakBefore = getManagerTotal(data, "polak");
+
+    const seededTeamWin: FantasyEvent = {
+      id: "evt-seed-team-win",
+      matchId: "m18",
+      assetId: "polak-8",
+      managerId: "polak",
+      type: "team_win",
+      points: 1,
+      minute: 90,
+      detail: "Norway win 1-3",
+      createdAt: "2026-06-16T22:00:00Z",
+      source: "seed",
+      eventHash: null,
+    };
+    const withSeedEvent: LeagueData = { ...data, fantasyEvents: [...data.fantasyEvents, seededTeamWin] };
+
+    const next = applyUpdateMatchResult(withSeedEvent, "m18", { status: "completed", homeScore: 1, awayScore: 3, minute: 90 }, DEFAULT_ADMIN_ACTOR)!;
+
+    const norwayEvents = next.fantasyEvents.filter((e) => e.assetId === "polak-8" && e.matchId === "m18");
+    expect(norwayEvents.filter((e) => e.type === "team_win")).toHaveLength(1);
+    expect(norwayEvents.map((e) => e.type)).toEqual(expect.arrayContaining(["team_win", "team_scored_3plus"]));
+    // The pre-existing seed team_win (1pt) + freshly-derived team_scored_3plus (1pt) - not two team_wins.
+    expect(getManagerTotal(next, "polak")).toBe(polakBefore + 2);
   });
 });
 

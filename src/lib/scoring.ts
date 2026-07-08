@@ -126,6 +126,38 @@ export function buildEventHash(params: {
 }
 
 /**
+ * Identifies a single real-world event independent of exact wording/hash -
+ * (matchId, assetId, type, minute) is enough to say "this goal" even if the
+ * `detail` text differs. Needed because curated seed events have no
+ * `eventHash` (`null` - they're hand-entered, not fetched), so the
+ * `event_hash` unique constraint alone can't catch a live-ingested event
+ * that's actually the same real-world thing the seed already recorded
+ * under a different id and wording - see `excludeEventsMatchingExisting`.
+ */
+export function eventIdentityKey(matchId: string | null, assetId: string, type: FantasyEventType, minute: number | null): string {
+  return `${matchId}:${assetId}:${type}:${minute}`;
+}
+
+/**
+ * Filters `events` down to ones that don't collide (by `eventIdentityKey`)
+ * with anything in `existingKeys` - and adds the survivors' keys to that
+ * set, so a second call (e.g. live events after result events) also sees
+ * them. Shared by the server-side ingest pipeline
+ * (src/lib/server/ingest-live-data.ts) and the admin match-result-correction
+ * mutation (src/lib/store/mutations.ts).
+ */
+export function excludeEventsMatchingExisting(events: FantasyEvent[], existingKeys: Set<string>): FantasyEvent[] {
+  const kept: FantasyEvent[] = [];
+  for (const event of events) {
+    const key = eventIdentityKey(event.matchId, event.assetId, event.type, event.minute);
+    if (existingKeys.has(key)) continue;
+    existingKeys.add(key);
+    kept.push(event);
+  }
+  return kept;
+}
+
+/**
  * Turns raw provider/derivation events into full FantasyEvent rows -
  * computing points and the dedup hash - shared by the server-side ingest
  * pipeline (src/lib/server/ingest-live-data.ts) and the admin

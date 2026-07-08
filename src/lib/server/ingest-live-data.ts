@@ -1,7 +1,14 @@
 import "server-only";
 
 import { getApiProvider, isMockMode } from "@/lib/api";
-import { computeMatchResultEvents, DEFAULT_SCORING_VALUES, materializeFantasyEvents, RESULT_EVENT_TYPES } from "@/lib/scoring";
+import {
+  computeMatchResultEvents,
+  DEFAULT_SCORING_VALUES,
+  eventIdentityKey,
+  excludeEventsMatchingExisting,
+  materializeFantasyEvents,
+  RESULT_EVENT_TYPES,
+} from "@/lib/scoring";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { fantasyEventToRow, matchFromRow, matchToRow, scoringValuesFromRow, squadAssetFromRow } from "@/lib/supabase/mappers";
 import type { Match, RawApiEvent } from "@/lib/types";
@@ -17,10 +24,13 @@ export interface IngestResult {
  * Fetches the live provider once, merges match status/score into
  * `matches`, and derives + upserts both result-based events (clean sheets,
  * team bonuses - recomputed fresh for every completed, unlocked match) and
- * live keyEvents-based events (goals, cards, assists) into `fantasy_events`,
- * deduped by the table's `event_hash` unique constraint. This is the
- * league's single source of truth - every viewer's browser reads the rows
- * this writes via /api/league-snapshot, rather than deriving events itself.
+ * live keyEvents-based events (goals, cards, assists) into `fantasy_events`.
+ * Deduped two ways: the `event_hash` unique constraint catches an exact
+ * repeat, and `excludeEventsMatchingExisting` catches the same real-world
+ * event arriving under different wording (crucially, a curated seed event,
+ * which has no hash at all). This is the league's single source of
+ * truth - every viewer's browser reads the rows this writes via
+ * /api/league-snapshot, rather than deriving events itself.
  */
 export async function ingestLiveData(): Promise<IngestResult> {
   const supabase = createSupabaseAdminClient();
@@ -69,7 +79,6 @@ export async function ingestLiveData(): Promise<IngestResult> {
   const cleanSheetIneligibleAssetIds = (await provider.getCleanSheetIneligibleAssetIds?.(apiMatches)) ?? {};
   const nonPlayingFor = (matchId: string) => new Set(cleanSheetIneligibleAssetIds[matchId] ?? []);
 
-  let resultEventsUpserted = 0;
   if (matchesToRederive.length > 0) {
     const rederiveIds = matchesToRederive.map((m) => m.id);
     // Result events are derived purely from the final score, so every
@@ -83,11 +92,34 @@ export async function ingestLiveData(): Promise<IngestResult> {
       .neq("source", "seed")
       .in("type", RESULT_EVENT_TYPES);
     if (deleteError) throw new Error(`Clearing stale result events failed: ${deleteError.message}`);
+  }
 
+  // Fetched after the stale-result-event delete above (not before), so a
+  // rederived match's own about-to-be-replaced rows don't count as
+  // "existing" and wrongly suppress their freshly-recomputed replacements.
+  // Keyed on (matchId, assetId, type, minute) rather than event_hash alone,
+  // since curated seed events have no hash (eventHash: null) - without
+  // this, a live-ingested event that's really the same real-world thing a
+  // seed event already recorded (just with different wording) sails past
+  // the hash unique constraint and double-counts. See buildEventHash vs
+  // eventIdentityKey in src/lib/scoring.ts.
+  const { data: existingEventRows, error: existingEventsError } = await supabase
+    .from("fantasy_events")
+    .select("match_id, asset_id, type, minute");
+  if (existingEventsError) throw new Error(`Loading fantasy_events failed: ${existingEventsError.message}`);
+  const existingKeys = new Set(
+    (existingEventRows ?? []).map((e) => eventIdentityKey(e.match_id, e.asset_id, e.type as RawApiEvent["type"], e.minute)),
+  );
+
+  let resultEventsUpserted = 0;
+  if (matchesToRederive.length > 0) {
     const resultRawEvents: RawApiEvent[] = matchesToRederive.flatMap((match) =>
       computeMatchResultEvents(match, squadAssets, nonPlayingFor(match.id)),
     );
-    const resultEvents = materializeFantasyEvents(resultRawEvents, assetsById, scoringValues, "api");
+    const resultEvents = excludeEventsMatchingExisting(
+      materializeFantasyEvents(resultRawEvents, assetsById, scoringValues, "api"),
+      existingKeys,
+    );
     if (resultEvents.length > 0) {
       const { error } = await supabase.from("fantasy_events").upsert(resultEvents.map(fantasyEventToRow), {
         onConflict: "event_hash",
@@ -100,7 +132,10 @@ export async function ingestLiveData(): Promise<IngestResult> {
 
   const eventMatches = apiMatches.filter((m) => m.status === "live" || m.status === "completed");
   const rawLiveEvents = eventMatches.length > 0 ? await provider.getLiveEvents(eventMatches) : [];
-  const liveEvents = materializeFantasyEvents(rawLiveEvents, assetsById, scoringValues, isMockMode() ? "mock" : "api");
+  const liveEvents = excludeEventsMatchingExisting(
+    materializeFantasyEvents(rawLiveEvents, assetsById, scoringValues, isMockMode() ? "mock" : "api"),
+    existingKeys,
+  );
 
   let liveEventsUpserted = 0;
   if (liveEvents.length > 0) {

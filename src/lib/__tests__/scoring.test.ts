@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES, isEventEligible } from "@/lib/scoring";
-import type { Match, SquadAsset } from "@/lib/types";
+import {
+  calculateEventPoints,
+  computeMatchResultEvents,
+  DEFAULT_SCORING_VALUES,
+  eventIdentityKey,
+  excludeEventsMatchingExisting,
+  isEventEligible,
+} from "@/lib/scoring";
+import type { FantasyEvent, Match, SquadAsset } from "@/lib/types";
 
 type Asset = Pick<SquadAsset, "assetType" | "position">;
 
@@ -167,5 +174,47 @@ describe("computeMatchResultEvents", () => {
     const omittedDefender: SquadAsset = { ...franceDefender, id: "asset-omitted-def", unavailable: true };
     const events = computeMatchResultEvents(baseMatch, [...squadAssets, omittedDefender]);
     expect(events.some((e) => e.assetId === omittedDefender.id)).toBe(false);
+  });
+});
+
+describe("excludeEventsMatchingExisting", () => {
+  function makeEvent(overrides: Partial<FantasyEvent> & { id: string }): FantasyEvent {
+    return {
+      matchId: "m9",
+      assetId: "lev-1",
+      managerId: "lev",
+      type: "goal",
+      points: 4,
+      minute: 45,
+      detail: "",
+      createdAt: "2026-06-14T17:52:00Z",
+      source: "api",
+      eventHash: "m9:lev-1:45:goal:",
+      ...overrides,
+    };
+  }
+
+  it("excludes an event whose (matchId, assetId, type, minute) already exists, regardless of hash/detail", () => {
+    // Mirrors a curated seed event (eventHash: null) being re-fetched from
+    // ESPN with different wording and a real hash - the scenario that
+    // caused seed + live ingest to double-count the same real-world goal.
+    const existingKeys = new Set([eventIdentityKey("m9", "lev-1", "goal", 45)]);
+    const incoming = [makeEvent({ id: "evt-new", detail: "Kai Havertz converts the penalty" })];
+
+    expect(excludeEventsMatchingExisting(incoming, existingKeys)).toEqual([]);
+  });
+
+  it("keeps events with a different minute (a genuinely different real-world event)", () => {
+    const existingKeys = new Set([eventIdentityKey("m9", "lev-1", "goal", 45)]);
+    const incoming = [makeEvent({ id: "evt-new", minute: 88 })];
+
+    expect(excludeEventsMatchingExisting(incoming, existingKeys)).toEqual(incoming);
+  });
+
+  it("also dedupes within the same batch, not just against the initial existingKeys", () => {
+    const existingKeys = new Set<string>();
+    const incoming = [makeEvent({ id: "evt-a" }), makeEvent({ id: "evt-b" })];
+
+    expect(excludeEventsMatchingExisting(incoming, existingKeys)).toEqual([incoming[0]]);
   });
 });

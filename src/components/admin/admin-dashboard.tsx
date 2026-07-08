@@ -5,6 +5,7 @@ import { AdminAuditTab } from "@/components/admin/admin-audit-tab";
 import { AdminEventsTab } from "@/components/admin/admin-events-tab";
 import { AdminMappingTab } from "@/components/admin/admin-mapping-tab";
 import { AdminMatchesTab } from "@/components/admin/admin-matches-tab";
+import { AdminResetButton } from "@/components/admin/admin-reset-button";
 import { AdminScoringTab } from "@/components/admin/admin-scoring-tab";
 import { AdminSeedButton } from "@/components/admin/admin-seed-button";
 import { AdminSupabaseRefresh } from "@/components/admin/admin-supabase-refresh";
@@ -20,6 +21,7 @@ export function AdminDashboard() {
 
       <AdminSeedButton />
       <AdminSupabaseRefresh />
+      <AdminResetButton />
 
       <Tabs defaultValue="events">
         <div className="overflow-x-auto">

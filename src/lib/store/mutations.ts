@@ -1,5 +1,12 @@
 import { countryCode } from "@/lib/countries";
-import { calculateEventPoints, computeMatchResultEvents, materializeFantasyEvents, RESULT_EVENT_TYPES } from "@/lib/scoring";
+import {
+  calculateEventPoints,
+  computeMatchResultEvents,
+  eventIdentityKey,
+  excludeEventsMatchingExisting,
+  materializeFantasyEvents,
+  RESULT_EVENT_TYPES,
+} from "@/lib/scoring";
 import { getAssetPoints, getManagerTotal, type LeagueData } from "@/lib/selectors";
 import type {
   AuditLogEntry,
@@ -54,19 +61,14 @@ function pushAudit(log: AuditLogEntry[], entry: Omit<AuditLogEntry, "id" | "time
 }
 
 /**
- * Server-side equivalents of the Zustand store's admin actions
- * (src/lib/store/league-store.ts), operating on a plain LeagueData
- * snapshot and returning the updated snapshot (or null for a no-op, e.g.
- * an id that doesn't exist) instead of using Zustand get()/set(). Used by
- * the Supabase-backed admin mutate route (src/lib/server/admin-mutations.ts)
- * so a write applies the exact same business logic as the localStorage
- * store. Kept as a parallel implementation rather than a shared refactor
- * of league-store.ts, to avoid any risk of changing that well-tested
- * existing store behavior - the one deliberate difference is
- * applyUpdateMatchResult, which materializes result events directly
- * instead of going through the store's apiEventCache-based ingestApiEvents,
- * since Supabase dedup is enforced by the `event_hash` unique constraint
- * instead (see docs/supabase-migration.md Phase 1).
+ * Pure admin-action logic, operating on a plain LeagueData snapshot and
+ * returning the updated snapshot (or null for a no-op, e.g. an id that
+ * doesn't exist). Used by POST /api/admin/mutate: fetch the current
+ * league from Supabase, apply one of these, write back only what
+ * changed. applyUpdateMatchResult additionally dedupes its freshly
+ * materialized result events against `eventIdentityKey` collisions with
+ * anything already present (crucially, curated seed events, which have
+ * no `event_hash`) - see excludeEventsMatchingExisting in scoring.ts.
  */
 
 export function applyAddFantasyEvent(data: LeagueData, input: AddEventInput, actor: string): LeagueData | null {
@@ -306,7 +308,16 @@ export function applyUpdateMatchResult(
     const rawResultEvents = computeMatchResultEvents(updated, data.squadAssets);
     if (rawResultEvents.length > 0) {
       const assetsById = new Map(data.squadAssets.map((a) => [a.id, a]));
-      fantasyEvents = [...fantasyEvents, ...materializeFantasyEvents(rawResultEvents, assetsById, data.scoringValues, "manual")];
+      // Exclude anything that already covers this (match, asset, type,
+      // minute) - most importantly a curated seed event, which has no
+      // hash and so wouldn't otherwise be recognized as the same
+      // real-world event under a fresh id.
+      const existingKeys = new Set(fantasyEvents.map((e) => eventIdentityKey(e.matchId, e.assetId, e.type, e.minute)));
+      const newEvents = excludeEventsMatchingExisting(
+        materializeFantasyEvents(rawResultEvents, assetsById, data.scoringValues, "manual"),
+        existingKeys,
+      );
+      fantasyEvents = [...fantasyEvents, ...newEvents];
     }
   }
 
