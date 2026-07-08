@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useLeagueActions } from "@/lib/hooks/use-league-actions";
 import { cn } from "@/lib/utils";
 import { SCORING_LABELS } from "@/lib/scoring";
 import { useLeagueStore } from "@/lib/store/league-store";
@@ -27,8 +28,7 @@ const TEAM_KEYS: (keyof ScoringValues)[] = ["teamWin", "teamScored3Plus", "teamL
 
 export function AdminScoringTab() {
   const scoringValues = useLeagueStore((s) => s.scoringValues);
-  const updateScoringValues = useLeagueStore((s) => s.updateScoringValues);
-  const recalculateAllPoints = useLeagueStore((s) => s.recalculateAllPoints);
+  const { updateScoringValues, recalculateAllPoints } = useLeagueActions();
 
   const [values, setValues] = useState<ScoringValues>(scoringValues);
   const [mode, setMode] = useState<"forward" | "recalculate">("forward");

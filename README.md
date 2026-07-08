@@ -52,7 +52,9 @@ to `localStorage` via the Zustand store in `src/lib/store/league-store.ts`.
 ### Admin access
 
 Visit `/league/world-cup-draft/admin` - the dashboard is open to anyone
-with the link, with no separate login.
+with the link, with no separate login. When `NEXT_PUBLIC_USE_SUPABASE=true`,
+it's gated instead by the shared passphrase in `ADMIN_SECRET` (see
+docs/supabase-migration.md Phase 3).
 
 ## Environment variables
 
@@ -92,6 +94,8 @@ src/
     api/admin/seed/route.ts      # idempotent Supabase seed load
     api/admin/refresh/route.ts   # on-demand Supabase ingest trigger
     api/league-snapshot/route.ts # read-only Supabase snapshot (Phase 2 shared reads)
+    api/admin/login|logout|session/route.ts  # passphrase session cookie (Phase 3 auth)
+    api/admin/mutate/route.ts    # dispatches admin writes to Supabase (Phase 3)
   components/
     leaderboard/, events/, matches/, squad/, admin/, shared/, ui/
   lib/
@@ -99,12 +103,14 @@ src/
     scoring.ts                # scoring engine (pure functions)
     selectors.ts              # derived state (leaderboard, feeds, etc.)
     store/league-store.ts     # Zustand store + admin actions + audit log
+    store/mutations.ts        # pure admin-action logic, shared with the Supabase mutate route
     data/seed.ts              # seed managers, squads, matches, events
     data/espn-fixture-map.ts  # SEED_MATCHES id -> ESPN event id mapping
     data/api-football-mapping.ts  # legacy fixture/player ID map for API-Football mode
     api/                       # mock, ESPN and API-Football provider adapters
     hooks/use-live-polling.ts  # polls match status + live events (ESPN-derived path)
     hooks/use-supabase-snapshot-polling.ts  # polls the Supabase snapshot (shared-reads path)
+    hooks/use-league-actions.ts  # admin write actions - store-backed or Supabase-backed per the flag
     supabase/                  # Supabase clients + row<->domain mappers (see docs/supabase-migration.md)
     server/                    # server-only helpers (admin auth, live-data ingest)
 supabase/schema.sql          # Supabase schema for a future backend
@@ -238,9 +244,11 @@ leaderboard page all point at that URL.
   until that browser's state is synced elsewhere. A Supabase-backed
   store (schema provided in `supabase/schema.sql`) is the natural next
   step for a shared, multi-device source of truth.
-- **The admin dashboard has no login** - anyone with the link can edit
-  scoring, events and the squad mapping. Add Supabase Auth + a role
-  check if you need to restrict access.
+- **The admin dashboard has no login** by default - anyone with the link
+  can edit scoring, events and the squad mapping. Set
+  `NEXT_PUBLIC_USE_SUPABASE=true` + `ADMIN_SECRET` for a shared-passphrase
+  gate (see docs/supabase-migration.md Phase 3), or add Supabase Auth + a
+  role check for per-manager accounts.
 - **Group Stage · Matchdays 1-3 (`m1`-`m66`) are statically mapped and
   validated** via `src/lib/data/espn-fixture-map.ts`. Knockout fixtures
   are picked up automatically by `discoverDynamicMatches` once ESPN's

@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useLeagueActions } from "@/lib/hooks/use-league-actions";
 import { getManagerAssets } from "@/lib/selectors";
 import { useLeagueStore } from "@/lib/store/league-store";
 import type { ManualAdjustment } from "@/lib/types";
@@ -26,7 +27,7 @@ const MANAGER_TOTAL = "manager-total";
 
 export function AdminAdjustmentsTab() {
   const data = useLeagueStore((s) => s);
-  const addManualAdjustment = useLeagueStore((s) => s.addManualAdjustment);
+  const { addManualAdjustment } = useLeagueActions();
 
   const [managerId, setManagerId] = useState(data.managers[0]?.id ?? "");
   const [assetId, setAssetId] = useState(MANAGER_TOTAL);
@@ -128,7 +129,7 @@ export function AdminAdjustmentsTab() {
 
 function AdjustmentRow({ adjustment }: { adjustment: ManualAdjustment }) {
   const data = useLeagueStore((s) => s);
-  const deleteManualAdjustment = useLeagueStore((s) => s.deleteManualAdjustment);
+  const { deleteManualAdjustment } = useLeagueActions();
 
   const manager = data.managers.find((m) => m.id === adjustment.managerId);
   const asset = adjustment.assetId ? data.squadAssets.find((a) => a.id === adjustment.assetId) : undefined;

@@ -1,4 +1,4 @@
-import type { FantasyEventType, Match, Position, RawApiEvent, ScoringValues, SquadAsset } from "@/lib/types";
+import type { FantasyEvent, FantasyEventType, Match, Position, RawApiEvent, ScoringValues, SquadAsset } from "@/lib/types";
 
 /** Default scoring values applied when the league is first created. */
 export const DEFAULT_SCORING_VALUES: ScoringValues = {
@@ -123,6 +123,41 @@ export function buildEventHash(params: {
   detail: string;
 }): string {
   return [params.fixtureId, params.assetId, params.minute, params.type, params.detail].join(":");
+}
+
+/**
+ * Turns raw provider/derivation events into full FantasyEvent rows -
+ * computing points and the dedup hash - shared by the server-side ingest
+ * pipeline (src/lib/server/ingest-live-data.ts) and the admin
+ * match-result-correction mutation (src/lib/store/mutations.ts), both of
+ * which need to materialize computeMatchResultEvents' output the same way.
+ */
+export function materializeFantasyEvents(
+  rawEvents: RawApiEvent[],
+  assetsById: Map<string, Pick<SquadAsset, "id" | "managerId" | "assetType" | "position">>,
+  scoringValues: ScoringValues,
+  source: FantasyEvent["source"],
+): FantasyEvent[] {
+  const nowIso = new Date().toISOString();
+  const events: FantasyEvent[] = [];
+  for (const raw of rawEvents) {
+    const asset = assetsById.get(raw.assetId);
+    if (!asset) continue;
+    events.push({
+      id: `evt-${crypto.randomUUID()}`,
+      matchId: raw.fixtureId,
+      assetId: raw.assetId,
+      managerId: asset.managerId,
+      type: raw.type,
+      points: calculateEventPoints(raw.type, asset, scoringValues),
+      minute: raw.minute,
+      detail: raw.detail,
+      createdAt: nowIso,
+      source,
+      eventHash: buildEventHash({ fixtureId: raw.fixtureId, assetId: raw.assetId, minute: raw.minute, type: raw.type, detail: raw.detail }),
+    });
+  }
+  return events;
 }
 
 /**

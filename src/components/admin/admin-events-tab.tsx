@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useLeagueActions } from "@/lib/hooks/use-league-actions";
 import { getManagerAssets } from "@/lib/selectors";
 import { isEventEligible, LOGGABLE_EVENT_TYPES } from "@/lib/scoring";
 import { useLeagueStore } from "@/lib/store/league-store";
@@ -27,7 +28,7 @@ const NO_MATCH = "none";
 
 export function AdminEventsTab() {
   const data = useLeagueStore((s) => s);
-  const addFantasyEvent = useLeagueStore((s) => s.addFantasyEvent);
+  const { addFantasyEvent } = useLeagueActions();
 
   const [managerId, setManagerId] = useState(data.managers[0]?.id ?? "");
   const [assetId, setAssetId] = useState("");
@@ -178,8 +179,7 @@ export function AdminEventsTab() {
 
 function EventRow({ event }: { event: FantasyEvent }) {
   const data = useLeagueStore((s) => s);
-  const updateFantasyEvent = useLeagueStore((s) => s.updateFantasyEvent);
-  const deleteFantasyEvent = useLeagueStore((s) => s.deleteFantasyEvent);
+  const { updateFantasyEvent, deleteFantasyEvent } = useLeagueActions();
 
   const asset = data.squadAssets.find((a) => a.id === event.assetId);
   const manager = data.managers.find((m) => m.id === event.managerId);

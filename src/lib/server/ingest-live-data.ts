@@ -1,11 +1,11 @@
 import "server-only";
 
 import { getApiProvider, isMockMode } from "@/lib/api";
-import { buildEventHash, calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES, RESULT_EVENT_TYPES } from "@/lib/scoring";
+import { computeMatchResultEvents, DEFAULT_SCORING_VALUES, materializeFantasyEvents, RESULT_EVENT_TYPES } from "@/lib/scoring";
 import { isSupabaseEnabled } from "@/lib/supabase/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { fantasyEventToRow, matchFromRow, matchToRow, scoringValuesFromRow, squadAssetFromRow } from "@/lib/supabase/mappers";
-import type { FantasyEvent, Match, RawApiEvent, ScoringValues, SquadAsset } from "@/lib/types";
+import type { Match, RawApiEvent } from "@/lib/types";
 
 export interface IngestResult {
   skipped?: string;
@@ -99,7 +99,7 @@ export async function ingestLiveData(): Promise<IngestResult> {
     const resultRawEvents: RawApiEvent[] = matchesToRederive.flatMap((match) =>
       computeMatchResultEvents(match, squadAssets, nonPlayingFor(match.id)),
     );
-    const resultEvents = toFantasyEventRows(resultRawEvents, "api", assetsById, scoringValues);
+    const resultEvents = materializeFantasyEvents(resultRawEvents, assetsById, scoringValues, "api");
     if (resultEvents.length > 0) {
       const { error } = await supabase.from("fantasy_events").upsert(resultEvents.map(fantasyEventToRow), {
         onConflict: "event_hash",
@@ -112,7 +112,7 @@ export async function ingestLiveData(): Promise<IngestResult> {
 
   const eventMatches = apiMatches.filter((m) => m.status === "live" || m.status === "completed");
   const rawLiveEvents = eventMatches.length > 0 ? await provider.getLiveEvents(eventMatches) : [];
-  const liveEvents = toFantasyEventRows(rawLiveEvents, isMockMode() ? "mock" : "api", assetsById, scoringValues);
+  const liveEvents = materializeFantasyEvents(rawLiveEvents, assetsById, scoringValues, isMockMode() ? "mock" : "api");
 
   let liveEventsUpserted = 0;
   if (liveEvents.length > 0) {
@@ -125,37 +125,4 @@ export async function ingestLiveData(): Promise<IngestResult> {
   }
 
   return { source: isMockMode() ? "mock" : "api", matchesUpserted, resultEventsUpserted, liveEventsUpserted };
-}
-
-function generateId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
-}
-
-/** Maps raw provider events onto full FantasyEvent rows, computing points and the dedup hash. */
-function toFantasyEventRows(
-  rawEvents: RawApiEvent[],
-  source: FantasyEvent["source"],
-  assetsById: Map<string, SquadAsset>,
-  scoringValues: ScoringValues,
-): FantasyEvent[] {
-  const nowIso = new Date().toISOString();
-  const events: FantasyEvent[] = [];
-  for (const raw of rawEvents) {
-    const asset = assetsById.get(raw.assetId);
-    if (!asset) continue;
-    events.push({
-      id: generateId("evt"),
-      matchId: raw.fixtureId,
-      assetId: raw.assetId,
-      managerId: asset.managerId,
-      type: raw.type,
-      points: calculateEventPoints(raw.type, asset, scoringValues),
-      minute: raw.minute,
-      detail: raw.detail,
-      createdAt: nowIso,
-      source,
-      eventHash: buildEventHash({ fixtureId: raw.fixtureId, assetId: raw.assetId, minute: raw.minute, type: raw.type, detail: raw.detail }),
-    });
-  }
-  return events;
 }

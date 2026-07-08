@@ -16,8 +16,9 @@ the same model.
 ## v1 decisions
 
 - **Auth**: a single shared admin passphrase kept in an env var
-  (`ADMIN_SECRET`), sent as a header - not full Supabase Auth with
-  per-manager accounts. Good enough for a league this size.
+  (`ADMIN_SECRET`) - sent as a header for one-off routes, or as an
+  httpOnly session cookie for the admin dashboard - not full Supabase
+  Auth with per-manager accounts. Good enough for a league this size.
 - **Freshness**: snapshot polling (matches the current `/api/live` polling
   model). Supabase Realtime subscriptions can replace polling later
   without changing the schema.
@@ -62,11 +63,24 @@ all writes go through the service-role key from trusted server code.
   ESPN-derived `useLivePolling`/`syncMatches`/`ingestApiEvents` path.
   Every page still reads from `useLeagueStore` unchanged - only *how* it
   gets populated differs.
-- **Phase 3 - admin writes + auth**: move the admin dashboard's mutating
-  actions (events, adjustments, scoring rules, match corrections, squad
-  mapping) from Zustand store actions to server actions/routes backed by
-  Supabase, gated by the shared passphrase (`ADMIN_SECRET`) instead of the
-  open access left after the admin-password gate was removed.
+- **Phase 3 - admin writes + auth** (`src/lib/store/mutations.ts`,
+  `POST /api/admin/mutate`, `useLeagueActions`, `AdminGate`): each of the
+  10 store mutations (add/update/delete event, add/delete adjustment,
+  scoring rules, recalculate, lock, match-result correction, squad mapping)
+  has a parallel pure `apply*` function operating on a `LeagueData`
+  snapshot instead of Zustand `get()`/`set()` - kept separate from
+  `league-store.ts` rather than refactored in place, so the well-tested
+  localStorage path is completely untouched. A single RPC-style route
+  dispatches to them against a fresh Supabase read, then
+  `writeBackLeagueData` upserts/deletes only the tables that changed.
+  `useLeagueActions` gives every admin tab the exact same action
+  signatures as the store, swapping to Supabase calls (+ an immediate
+  snapshot re-poll) only when the flag is on - no tab needed a Supabase-
+  specific code path. Auth: a shared passphrase (`ADMIN_SECRET`), entered
+  once via `/api/admin/login` into an httpOnly session cookie
+  (`AdminGate`/`AdminLogoutButton`) rather than resending it on every
+  click; `/api/admin/seed` and `/api/admin/refresh` keep the simpler
+  one-off `x-admin-secret` header since they're called rarely.
 - **Phase 4 - cutover**: flip `NEXT_PUBLIC_USE_SUPABASE` to `true` by
   default, remove the Zustand `persist` middleware/localStorage code path,
   and retire `api_event_cache`/the client-side dedup logic now that the DB
@@ -77,5 +91,5 @@ all writes go through the service-role key from trusted server code.
 - [x] Phase 0
 - [x] Phase 1
 - [x] Phase 2
-- [ ] Phase 3
+- [x] Phase 3
 - [ ] Phase 4

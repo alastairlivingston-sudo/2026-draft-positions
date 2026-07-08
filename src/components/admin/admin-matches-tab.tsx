@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useLeagueActions } from "@/lib/hooks/use-league-actions";
 import { useLeagueStore } from "@/lib/store/league-store";
 import type { Match, MatchStatus } from "@/lib/types";
 
@@ -26,7 +27,7 @@ const STATUSES: MatchStatus[] = ["upcoming", "live", "completed"];
 
 export function AdminMatchesTab() {
   const matches = useLeagueStore((s) => s.matches);
-  const toggleMatchLock = useLeagueStore((s) => s.toggleMatchLock);
+  const { toggleMatchLock } = useLeagueActions();
 
   return (
     <div className="flex flex-col gap-2">
@@ -71,7 +72,7 @@ export function AdminMatchesTab() {
 }
 
 function EditResultDialog({ match }: { match: Match }) {
-  const updateMatchResult = useLeagueStore((s) => s.updateMatchResult);
+  const { updateMatchResult } = useLeagueActions();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<MatchStatus>(match.status);
   const [homeScore, setHomeScore] = useState(match.homeScore?.toString() ?? "");

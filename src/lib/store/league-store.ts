@@ -12,6 +12,7 @@ import {
 } from "@/lib/data/seed";
 import { calculateEventPoints, computeMatchResultEvents, DEFAULT_SCORING_VALUES, RESULT_EVENT_TYPES } from "@/lib/scoring";
 import { getAssetPoints, getManagerTotal, type LeagueData } from "@/lib/selectors";
+import { DEFAULT_ADMIN_ACTOR } from "@/lib/store/mutations";
 import type {
   AuditAction,
   AuditLogEntry,
@@ -24,7 +25,7 @@ import type {
   SquadAsset,
 } from "@/lib/types";
 
-export const DEFAULT_ADMIN_ACTOR = "admin";
+export { DEFAULT_ADMIN_ACTOR };
 
 function generateId(prefix: string): string {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2);

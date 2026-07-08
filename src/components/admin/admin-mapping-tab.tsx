@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { COUNTRY_CODES } from "@/lib/countries";
+import { useLeagueActions } from "@/lib/hooks/use-league-actions";
 import { getManagerAssets } from "@/lib/selectors";
 import { useLeagueStore } from "@/lib/store/league-store";
 import type { AssetType, Position, SquadAsset } from "@/lib/types";
@@ -52,7 +53,7 @@ export function AdminMappingTab() {
 }
 
 function AssetRow({ asset }: { asset: SquadAsset }) {
-  const updateSquadAsset = useLeagueStore((s) => s.updateSquadAsset);
+  const { updateSquadAsset } = useLeagueActions();
   const [open, setOpen] = useState(false);
 
   const [name, setName] = useState(asset.name);
