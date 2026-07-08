@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { DEFAULT_SCORING_VALUES } from "@/lib/scoring";
-import { isAdminRequestAuthorized } from "@/lib/server/route-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   auditLogEntryToRow,
@@ -34,16 +33,12 @@ export interface SeedResult {
  * after a schema change) is safe and just overwrites rows with the current
  * seed values rather than duplicating them.
  *
- * Requires `x-admin-secret: $ADMIN_SECRET` since it writes with the
- * service-role key. Insert order follows the schema's foreign keys:
- * managers -> squad assets -> matches -> scoring rules -> fantasy events
- * -> manual adjustments -> audit log.
+ * No auth gate - the admin dashboard is open to anyone with the link,
+ * same as the rest of the app. Insert order follows the schema's foreign
+ * keys: managers -> squad assets -> matches -> scoring rules -> fantasy
+ * events -> manual adjustments -> audit log.
  */
-export async function POST(request: Request) {
-  if (!isAdminRequestAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function POST() {
   const steps: { table: string; count: number }[] = [];
 
   try {

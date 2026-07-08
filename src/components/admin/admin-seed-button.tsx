@@ -11,9 +11,7 @@ import type { SeedResult } from "@/app/api/admin/seed/route";
  * One-time (but safe to re-run) trigger for /api/admin/seed - loads the
  * curated league data into Supabase. Exists as a button, not just a curl
  * command, so first-time setup doesn't require a terminal (e.g. from a
- * phone/tablet): tap it, enter the passphrase, done. Uses the one-off
- * `x-admin-secret` header like AdminSupabaseRefresh, since it's called
- * rarely.
+ * phone/tablet): tap it, done.
  */
 export function AdminSeedButton() {
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -24,13 +22,11 @@ export function AdminSeedButton() {
     if (!window.confirm("Load the curated league data into Supabase? Safe to re-run, but overwrites any admin edits made to seeded rows since the last run.")) {
       return;
     }
-    const secret = window.prompt("Admin passphrase");
-    if (!secret) return;
 
     setStatus("loading");
     setError(null);
     try {
-      const res = await fetch("/api/admin/seed", { method: "POST", headers: { "x-admin-secret": secret } });
+      const res = await fetch("/api/admin/seed", { method: "POST" });
       const data: SeedResult = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       setResult(data);

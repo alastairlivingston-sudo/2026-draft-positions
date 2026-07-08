@@ -21,11 +21,10 @@ in sync with ESPN.
 - **Event feed** - chronological log of every fantasy point awarded,
   filterable by manager and match.
 - **Rules page** - the current scoring values, explained.
-- **Admin dashboard** (passphrase-gated) - add/edit/delete fantasy
-  events, manual point adjustments, edit scoring rules (apply going
-  forward or recalculate history), lock/unlock matches, edit the
-  squad-asset mapping, trigger an on-demand data refresh, and a full
-  audit log.
+- **Admin dashboard** - add/edit/delete fantasy events, manual point
+  adjustments, edit scoring rules (apply going forward or recalculate
+  history), lock/unlock matches, edit the squad-asset mapping, trigger
+  an on-demand data refresh/seed, and a full audit log.
 - **Cast mode** - a full-screen scoreboard for a TV or projector.
 - **Sharing** - copy invite link, WhatsApp share, and a QR code.
 - **PWA-friendly** - installable with a manifest and app icon.
@@ -47,7 +46,7 @@ in sync with ESPN.
    create one at [supabase.com](https://supabase.com) by hand).
 2. Apply `supabase/schema.sql` via the Supabase SQL editor.
 3. Copy `.env.example` to `.env.local` and fill in the Supabase URL/keys
-   plus `ADMIN_SECRET` (see the table below).
+   (see the table below).
 4. Install and run:
 
    ```bash
@@ -57,11 +56,11 @@ in sync with ESPN.
 
 5. Seed the database once - this loads the real league (managers,
    squads, match schedule, curated historical events) from
-   `src/lib/data/seed.ts`. Either log into `/league/world-cup-draft/admin`
-   with `ADMIN_SECRET` and click "Seed database" (no terminal needed), or:
+   `src/lib/data/seed.ts`. Either visit `/league/world-cup-draft/admin`
+   and click "Seed database" (no terminal needed), or:
 
    ```bash
-   curl -X POST http://localhost:3000/api/admin/seed -H "x-admin-secret: $ADMIN_SECRET"
+   curl -X POST http://localhost:3000/api/admin/seed
    ```
 
 Open <http://localhost:3000> - it redirects to `/league/world-cup-draft`.
@@ -71,10 +70,8 @@ the same Supabase project sees identical, live state.
 
 ### Admin access
 
-Visit `/league/world-cup-draft/admin` and enter the passphrase set in
-`ADMIN_SECRET` - it's checked once by `/api/admin/login`, which sets an
-httpOnly session cookie for subsequent admin actions (see
-`src/components/admin/admin-gate.tsx`).
+Visit `/league/world-cup-draft/admin` - the dashboard is open to anyone
+with the link, with no login (see "Known limitations").
 
 ### Keeping data fresh
 
@@ -86,7 +83,7 @@ for live scores). To refresh on demand without waiting for the schedule,
 either call it directly or use the admin dashboard's "Refresh now" button:
 
 ```bash
-curl -X POST http://localhost:3000/api/admin/refresh -H "x-admin-secret: $ADMIN_SECRET"
+curl -X POST http://localhost:3000/api/admin/refresh
 ```
 
 ## Environment variables
@@ -99,8 +96,7 @@ the rest have working defaults:
 | `NEXT_PUBLIC_SUPABASE_URL` | _(required)_ | Supabase project URL (see `supabase/schema.sql`). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | _(required)_ | Supabase anon/public key - RLS restricts it to read-only. |
 | `SUPABASE_SERVICE_ROLE_KEY` | _(required)_ | Supabase service-role key - server-only, used by the seed/ingest/admin-mutate routes to bypass RLS for writes. Never expose to the client. |
-| `ADMIN_SECRET` | _(required)_ | Shared passphrase gating the admin dashboard (`/api/admin/login` session) and the one-off `/api/admin/seed` / `/api/admin/refresh` routes (`x-admin-secret` header). |
-| `CRON_SECRET` | _(required for the scheduled cron)_ | Required by Vercel Cron to call `/api/cron/ingest` (sent as `Authorization: Bearer $CRON_SECRET`, per Vercel's convention). |
+| `CRON_SECRET` | _(required for the scheduled cron)_ | Checked by `/api/cron/ingest` against the GitHub Actions workflow's `Authorization: Bearer` header (see `.github/workflows/ingest-cron.yml`). |
 | `NEXT_PUBLIC_USE_MOCK_DATA` | `false` | Controls which provider the **server-side ingest job** uses. Live ESPN scores/events are the default; set to `true` to use the scripted mock/seed data instead (local dev / demo). |
 | `API_FOOTBALL_KEY` | _(none)_ | Optional legacy provider ([API-Football](https://www.api-football.com/)) for the ingest job - if set alongside `NEXT_PUBLIC_USE_MOCK_DATA=false`, used instead of the default ESPN provider. Its free tier doesn't cover the 2026 World Cup. |
 | `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS` | `60000` | How often the browser polls `/api/league-snapshot`, in ms. Only affects UI freshness, not how often the cron re-ingests ESPN. |
@@ -117,14 +113,13 @@ src/
         matches/              # match centre
         events/               # event feed
         rules/                # scoring rules
-        admin/                # admin dashboard (passphrase-gated)
+        admin/                # admin dashboard
       cast/                  # full-screen cast mode (no nav)
       layout.tsx             # live-polling provider
     api/cron/ingest/route.ts     # scheduled ESPN -> Supabase ingest (see docs/supabase-migration.md)
     api/admin/seed/route.ts      # idempotent Supabase seed load
     api/admin/refresh/route.ts   # on-demand ingest trigger
     api/league-snapshot/route.ts # read-only Supabase snapshot - every page's data source
-    api/admin/login|logout|session/route.ts  # passphrase session cookie
     api/admin/mutate/route.ts    # dispatches every admin write to Supabase
   components/
     leaderboard/, events/, matches/, squad/, admin/, shared/, ui/
@@ -141,7 +136,7 @@ src/
     hooks/use-supabase-snapshot-polling.ts  # polls the Supabase snapshot
     hooks/use-league-actions.ts  # admin write actions, POSTed to /api/admin/mutate
     supabase/                  # Supabase clients + row<->domain mappers (see docs/supabase-migration.md)
-    server/                    # server-only helpers (admin auth, league-data read/write, live-data ingest)
+    server/                    # server-only helpers (cron auth, league-data read/write, live-data ingest)
 supabase/schema.sql          # Supabase schema - apply via the SQL editor
 ```
 
@@ -248,11 +243,10 @@ mapping, name/country normalization, and clean-sheet eligibility.
 
 1. Push this repo to GitHub and import it into [Vercel](https://vercel.com/new).
 2. Add the [Supabase integration](https://vercel.com/integrations/supabase)
-   (or set the Supabase env vars by hand) plus `ADMIN_SECRET` and
-   `CRON_SECRET`.
+   (or set the Supabase env vars by hand) plus `CRON_SECRET`.
 3. Apply `supabase/schema.sql` via the Supabase SQL editor.
-4. Deploy, then seed once: `POST /api/admin/seed` with the
-   `x-admin-secret` header.
+4. Deploy, then visit `/league/world-cup-draft/admin` and click "Seed
+   database".
 5. Add a `CRON_SECRET` repository secret in GitHub (Settings -> Secrets
    and variables -> Actions) matching the same env var in Vercel -
    `.github/workflows/ingest-cron.yml` calls `/api/cron/ingest` every 5
@@ -269,10 +263,9 @@ leaderboard page all point at that URL.
   `/api/league-snapshot` on an interval rather than subscribing to
   Supabase Realtime. Good enough for a league this size; see
   docs/supabase-migration.md for the upgrade path.
-- **Admin auth is a single shared passphrase**, not per-manager
-  accounts - anyone with the passphrase can edit scoring, events and the
-  squad mapping. Supabase Auth + a role check would be the natural next
-  step if you need to restrict access more granularly.
+- **The admin dashboard has no login** - anyone with the link can edit
+  scoring, events and the squad mapping. Add Supabase Auth + a role
+  check if you need to restrict access.
 - **Group Stage · Matchdays 1-3 (`m1`-`m66`) are statically mapped and
   validated** via `src/lib/data/espn-fixture-map.ts`. Knockout fixtures
   are picked up automatically by `discoverDynamicMatches` once ESPN's
@@ -296,6 +289,6 @@ leaderboard page all point at that URL.
 - Supabase Realtime subscriptions instead of snapshot polling, for
   instant updates without the interval delay.
 - Supabase Auth for per-manager admin accounts and per-action audit
-  identities, instead of one shared passphrase.
+  identities, instead of open access.
 - Add push notifications / toasts for live scoring events.
 - Add a draft/squad-editing flow for future seasons.

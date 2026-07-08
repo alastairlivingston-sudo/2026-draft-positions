@@ -10,9 +10,7 @@ import type { IngestResult } from "@/lib/server/ingest-live-data";
 /**
  * On-demand trigger for /api/admin/refresh (the same ESPN-to-Supabase
  * ingest the cron job runs on a schedule) - for an admin who doesn't want
- * to wait for the next tick. Uses the one-off `x-admin-secret` header
- * (prompted per click) rather than the dashboard's login session, since
- * it's called rarely - see /api/admin/mutate for the frequently-called path.
+ * to wait for the next tick.
  */
 export function AdminSupabaseRefresh() {
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -20,13 +18,10 @@ export function AdminSupabaseRefresh() {
   const [error, setError] = useState<string | null>(null);
 
   const handleRefresh = async () => {
-    const secret = window.prompt("Admin passphrase");
-    if (!secret) return;
-
     setStatus("loading");
     setError(null);
     try {
-      const res = await fetch("/api/admin/refresh", { method: "POST", headers: { "x-admin-secret": secret } });
+      const res = await fetch("/api/admin/refresh", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       setResult(data);

@@ -18,10 +18,17 @@ this migration brought this app onto the same model.
 
 ## v1 decisions
 
-- **Auth**: a single shared admin passphrase kept in an env var
-  (`ADMIN_SECRET`) - sent as a header for one-off routes, or as an
-  httpOnly session cookie for the admin dashboard - not full Supabase
-  Auth with per-manager accounts. Good enough for a league this size.
+- **Auth**: none - the admin dashboard is open to anyone with the link,
+  same as before the migration. A shared-passphrase gate (`ADMIN_SECRET`)
+  was built and shipped in Phase 3, then removed shortly after: the env
+  var couldn't be re-verified once saved (most dashboards mask secret
+  values after creation) and iPad Safari's password autofill made typing
+  it back in unreliable, so it consistently rejected correct passphrases
+  in practice. Given this app has flip-flopped on admin auth before (it
+  shipped with none, briefly, before this migration too) and the league
+  is small and trusted, removing it again was the pragmatic call rather
+  than debugging the input flow further. Supabase Auth remains the
+  natural upgrade if per-manager accounts are ever needed.
 - **Freshness**: snapshot polling (`/api/league-snapshot`, every
   `NEXT_PUBLIC_LIVE_POLL_INTERVAL_MS`). Supabase Realtime subscriptions
   can replace polling later without changing the schema.
@@ -71,20 +78,19 @@ entirely.
   wholesale (Supabase is the single source of truth, so no client-side
   merge/derive needed). Every page still reads from `useLeagueStore`
   unchanged - only *how* it gets populated differs.
-- **Phase 3 - admin writes + auth** (`src/lib/store/mutations.ts`,
-  `POST /api/admin/mutate`, `useLeagueActions`, `AdminGate`): each admin
-  mutation (add/update/delete event, add/delete adjustment, scoring
-  rules, recalculate, lock, match-result correction, squad mapping) is a
-  pure `apply*` function operating on a `LeagueData` snapshot. A single
+- **Phase 3 - admin writes** (`src/lib/store/mutations.ts`,
+  `POST /api/admin/mutate`, `useLeagueActions`): each admin mutation
+  (add/update/delete event, add/delete adjustment, scoring rules,
+  recalculate, lock, match-result correction, squad mapping) is a pure
+  `apply*` function operating on a `LeagueData` snapshot. A single
   RPC-style route dispatches to them against a fresh Supabase read, then
   `writeBackLeagueData` upserts/deletes only the tables that changed.
   `useLeagueActions` gives every admin tab (and the public Match Centre's
   lock toggle) the write actions, POSTing to the mutate route and
-  triggering an immediate snapshot re-poll. Auth: the shared passphrase,
-  entered once via `/api/admin/login` into an httpOnly session cookie
-  (`AdminGate`/`AdminLogoutButton`) rather than resending it on every
-  click; `/api/admin/seed` and `/api/admin/refresh` use the simpler
-  one-off `x-admin-secret` header since they're called rarely.
+  triggering an immediate snapshot re-poll. This phase originally added a
+  shared-passphrase login (`AdminGate`, `/api/admin/login`) gating the
+  dashboard and these routes; see "v1 decisions" above for why that was
+  removed again shortly after.
 - **Phase 4 - cutover**: removed the flag and the code it guarded -
   `league-store.ts`'s Zustand `persist` middleware/localStorage, the
   versioned migration logic, `apiEventCache`/`resultComputedMatchIds`,
