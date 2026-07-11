@@ -1,6 +1,7 @@
 # Incident: scores stopped auto-updating (France v Morocco QF)
 
-**Date:** 2026-07-10
+**Date:** 2026-07-10 to 2026-07-11
+**Status:** Resolved.
 **Symptom:** France 2-0 Morocco (Quarter-final) wasn't showing on the site,
 even after a browser refresh.
 
@@ -68,6 +69,42 @@ working manual path until this is fixed.
    with the *same* value for Production, then redeploy.
 4. Re-run the workflow (or wait for the next tick) and confirm it succeeds.
 
+### Second false start: saved to the wrong GitHub location
+
+The first attempt to add `CRON_SECRET` on the GitHub side didn't fix
+anything - the value had been added under **Settings -> Environments ->
+(an environment) -> Environment variables**, not the repository-level
+secret the workflow actually reads. Two problems with that:
+
+- Secrets/variables scoped to a GitHub *Environment* are only visible to a
+  job that declares `environment: <name>` - `ingest-cron.yml`'s `ingest` job
+  has no such key, so the value was invisible to it regardless of naming.
+- It was entered as an environment *variable* (`vars.*` context, stored and
+  displayed in plaintext), not a *secret* (`secrets.*` context). The
+  workflow reads `secrets.CRON_SECRET`, which never resolves a variable.
+
+Confirmed via the job log for the run that followed: it sent
+`Authorization: Bearer ` with nothing after `Bearer ` - i.e.
+`secrets.CRON_SECRET` was still resolving to an empty string in the
+workflow's context.
+
+**Actual fix:** repo root -> Settings -> Secrets and variables -> Actions ->
+**"Secrets" tab** (not "Variables", not under Environments) -> New
+repository secret -> `CRON_SECRET`. Combined with the same value already
+set on Vercel, this resolved it.
+
+### Resolution confirmed
+
+Rather than wait for the next (heavily throttled, see Prevention below)
+scheduled tick, the workflow was triggered on demand via
+`workflow_dispatch`. That run completed with `conclusion: success` at
+2026-07-11T06:42Z - the first successful run since the cron was registered.
+`/api/league-snapshot`'s `fetchedAt` advanced to match
+(`2026-07-11T06:43:03Z`), confirming it wrote fresh data rather than just
+returning 200. `CRON_SECRET` is now correctly set on both GitHub Actions
+(repository secret) and Vercel (Production env var), and the two values
+match.
+
 ## Prevention
 
 - When promoting a new trunk branch (per `docs/enterprise-git-workflow.md`),
@@ -83,3 +120,16 @@ working manual path until this is fixed.
 - The admin dashboard's "Refresh" button (`/api/admin/refresh`) is the
   correct manual workaround if live scores ever look stale again - it
   triggers the same ingest path as the cron, on demand, with no auth gate.
+- GitHub Actions does not honor `*/5 * * * *` precisely - observed actual
+  spacing between runs was roughly 1-2 hours, not 5 minutes, which GitHub
+  attributes to scheduling load rather than anything in this repo's config.
+  Don't rely on the schedule for near-real-time freshness; the admin
+  "Refresh" button is the dependable path right after a match ends.
+- GitHub's Environments feature (Settings -> Environments) and its
+  per-environment secrets/variables are a separate, easily-confused system
+  from repository-level Actions secrets (Settings -> Secrets and variables
+  -> Actions). A workflow only sees environment-scoped values if its job
+  explicitly opts in with `environment: <name>` - otherwise entries made
+  there are silently inert. When a workflow references `secrets.<NAME>`,
+  add it as a *repository* secret unless the job specifically uses an
+  environment.
