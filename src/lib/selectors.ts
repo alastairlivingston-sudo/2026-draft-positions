@@ -277,3 +277,133 @@ export function getEventFeed(data: LeagueData): FeedEntry[] {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Points journey: each manager's cumulative points at the end of every
+// tournament day. Drives the interactive "Points Journey" chart.
+// ---------------------------------------------------------------------------
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MS_PER_DAY = 86_400_000;
+
+/** UTC calendar day (YYYY-MM-DD) an ISO timestamp falls on. */
+function utcDayKey(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+/** Short, timezone-stable label for a YYYY-MM-DD key, e.g. "11 Jun". */
+function dayLabel(dateKey: string): string {
+  const [, month, day] = dateKey.split("-").map(Number);
+  return `${day} ${MONTHS_SHORT[month - 1]}`;
+}
+
+export interface ProgressionDay {
+  /** YYYY-MM-DD (UTC). */
+  date: string;
+  label: string;
+}
+
+export interface ManagerProgression {
+  manager: Manager;
+  /** Cumulative total at the end of each day, index-aligned with `days`. */
+  totals: number[];
+  /** Rank (1 = leader) at the end of each day, index-aligned with `days`. */
+  ranks: number[];
+  finalTotal: number;
+}
+
+export interface DailyProgression {
+  days: ProgressionDay[];
+  series: ManagerProgression[];
+  /** Highest cumulative total reached by any manager on any day (min 0). */
+  maxTotal: number;
+  /** Lowest cumulative total reached by any manager on any day (max 0). */
+  minTotal: number;
+}
+
+/**
+ * Builds a per-day cumulative points curve for every manager, spanning a
+ * continuous daily range from the first scoring day to the most recent one
+ * (days with no scoring keep the previous day's total, so lines stay flat
+ * rather than breaking). Each manager's final total equals
+ * getManagerTotal for well-formed data, and per-day ranks reuse the
+ * leaderboard tie-break (higher total, then manager name) so the rank view
+ * matches the table.
+ */
+export function computeDailyProgression(data: LeagueData): DailyProgression {
+  const { managers } = data;
+  const managerIds = new Set(managers.map((m) => m.id));
+
+  // managerId -> dateKey -> net points scored that day
+  const deltas = new Map<string, Map<string, number>>();
+  const dateKeys = new Set<string>();
+
+  const addDelta = (managerId: string, iso: string, points: number) => {
+    if (!managerIds.has(managerId)) return;
+    const key = utcDayKey(iso);
+    dateKeys.add(key);
+    let byDay = deltas.get(managerId);
+    if (!byDay) {
+      byDay = new Map();
+      deltas.set(managerId, byDay);
+    }
+    byDay.set(key, (byDay.get(key) ?? 0) + points);
+  };
+
+  for (const event of data.fantasyEvents) addDelta(event.managerId, event.createdAt, event.points);
+  for (const adjustment of data.manualAdjustments) addDelta(adjustment.managerId, adjustment.createdAt, adjustment.points);
+
+  if (dateKeys.size === 0) {
+    return {
+      days: [],
+      series: managers.map((manager) => ({ manager, totals: [], ranks: [], finalTotal: 0 })),
+      maxTotal: 0,
+      minTotal: 0,
+    };
+  }
+
+  const sortedKeys = [...dateKeys].sort();
+  const firstMs = Date.parse(`${sortedKeys[0]}T00:00:00Z`);
+  const lastMs = Date.parse(`${sortedKeys[sortedKeys.length - 1]}T00:00:00Z`);
+
+  const days: ProgressionDay[] = [];
+  for (let t = firstMs; t <= lastMs; t += MS_PER_DAY) {
+    const key = new Date(t).toISOString().slice(0, 10);
+    days.push({ date: key, label: dayLabel(key) });
+  }
+
+  let maxTotal = 0;
+  let minTotal = 0;
+  const running = new Map<string, number>(managers.map((m) => [m.id, 0]));
+  const totalsByManager = new Map<string, number[]>(managers.map((m) => [m.id, []]));
+
+  for (const day of days) {
+    for (const manager of managers) {
+      const next = (running.get(manager.id) ?? 0) + (deltas.get(manager.id)?.get(day.date) ?? 0);
+      running.set(manager.id, next);
+      totalsByManager.get(manager.id)!.push(next);
+      if (next > maxTotal) maxTotal = next;
+      if (next < minTotal) minTotal = next;
+    }
+  }
+
+  const ranksByManager = new Map<string, number[]>(managers.map((m) => [m.id, []]));
+  days.forEach((_, dayIndex) => {
+    const order = managers
+      .map((m) => ({ id: m.id, name: m.name, total: totalsByManager.get(m.id)![dayIndex] }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    order.forEach((row, index) => ranksByManager.get(row.id)!.push(index + 1));
+  });
+
+  const series: ManagerProgression[] = managers.map((manager) => {
+    const totals = totalsByManager.get(manager.id)!;
+    return {
+      manager,
+      totals,
+      ranks: ranksByManager.get(manager.id)!,
+      finalTotal: totals[totals.length - 1] ?? 0,
+    };
+  });
+
+  return { days, series, maxTotal, minTotal };
+}

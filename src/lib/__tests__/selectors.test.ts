@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { getRemainingMatchCount, isTeamPresumedEliminated, type LeagueData } from "@/lib/selectors";
-import type { Match } from "@/lib/types";
+import {
+  computeDailyProgression,
+  getManagerTotal,
+  getRemainingMatchCount,
+  isTeamPresumedEliminated,
+  type LeagueData,
+} from "@/lib/selectors";
+import {
+  SEED_FANTASY_EVENTS,
+  SEED_MANAGERS,
+  SEED_MANUAL_ADJUSTMENTS,
+  SEED_MATCHES,
+  SEED_SQUAD_ASSETS,
+} from "@/lib/data/seed";
+import { DEFAULT_SCORING_VALUES } from "@/lib/scoring";
+import type { FantasyEvent, Manager, Match } from "@/lib/types";
 
 function makeMatch(overrides: Partial<Match> & { id: string }): Match {
   return {
@@ -99,5 +113,106 @@ describe("isTeamPresumedEliminated", () => {
   it("is false for a country with no matches at all", () => {
     const data = makeData([]);
     expect(isTeamPresumedEliminated(data, "Nowhere")).toBe(false);
+  });
+});
+
+describe("computeDailyProgression", () => {
+  const managers: Manager[] = [
+    { id: "a", name: "Ana", initials: "AN", color: "#111" },
+    { id: "b", name: "Bo", initials: "BO", color: "#222" },
+  ];
+
+  function makeEvent(overrides: Partial<FantasyEvent> & { id: string }): FantasyEvent {
+    return {
+      matchId: "m1",
+      assetId: "x",
+      managerId: "a",
+      type: "goal",
+      points: 4,
+      minute: 10,
+      detail: null,
+      createdAt: "2026-06-11T20:00:00Z",
+      source: "seed",
+      eventHash: null,
+      ...overrides,
+    };
+  }
+
+  function progressionData(events: FantasyEvent[]): LeagueData {
+    return {
+      managers,
+      squadAssets: [],
+      matches: [],
+      fantasyEvents: events,
+      manualAdjustments: [],
+      scoringValues: {} as LeagueData["scoringValues"],
+      auditLog: [],
+    };
+  }
+
+  it("returns empty days but one series per manager when nothing is scored", () => {
+    const result = computeDailyProgression(progressionData([]));
+    expect(result.days).toEqual([]);
+    expect(result.series.map((s) => s.manager.id)).toEqual(["a", "b"]);
+    expect(result.series.every((s) => s.finalTotal === 0)).toBe(true);
+  });
+
+  it("accumulates points per manager and carries flat days forward", () => {
+    const result = computeDailyProgression(
+      progressionData([
+        makeEvent({ id: "e1", managerId: "a", points: 4, createdAt: "2026-06-11T20:00:00Z" }),
+        // No scoring on Jun 12 - line should stay flat across the gap.
+        makeEvent({ id: "e2", managerId: "a", points: 2, createdAt: "2026-06-13T20:00:00Z" }),
+        makeEvent({ id: "e3", managerId: "b", points: 5, createdAt: "2026-06-13T21:00:00Z" }),
+      ]),
+    );
+
+    // Continuous range Jun 11, 12, 13.
+    expect(result.days.map((d) => d.date)).toEqual(["2026-06-11", "2026-06-12", "2026-06-13"]);
+
+    const ana = result.series.find((s) => s.manager.id === "a")!;
+    const bo = result.series.find((s) => s.manager.id === "b")!;
+    expect(ana.totals).toEqual([4, 4, 6]);
+    expect(bo.totals).toEqual([0, 0, 5]);
+    expect(ana.finalTotal).toBe(6);
+    expect(result.maxTotal).toBe(6);
+  });
+
+  it("tracks negative dips and reports minTotal", () => {
+    const result = computeDailyProgression(
+      progressionData([makeEvent({ id: "e1", managerId: "a", type: "team_loss", points: -1 })]),
+    );
+    expect(result.series.find((s) => s.manager.id === "a")!.totals).toEqual([-1]);
+    expect(result.minTotal).toBe(-1);
+  });
+
+  it("ranks managers each day using the leaderboard tie-break", () => {
+    const result = computeDailyProgression(
+      progressionData([
+        makeEvent({ id: "e1", managerId: "b", points: 3, createdAt: "2026-06-11T20:00:00Z" }),
+        makeEvent({ id: "e2", managerId: "a", points: 10, createdAt: "2026-06-12T20:00:00Z" }),
+      ]),
+    );
+    const ana = result.series.find((s) => s.manager.id === "a")!;
+    const bo = result.series.find((s) => s.manager.id === "b")!;
+    // Day 1: Bo leads. Day 2: Ana overtakes.
+    expect(ana.ranks).toEqual([2, 1]);
+    expect(bo.ranks).toEqual([1, 2]);
+  });
+
+  it("final totals match getManagerTotal for the real seed data", () => {
+    const data: LeagueData = {
+      managers: SEED_MANAGERS,
+      squadAssets: SEED_SQUAD_ASSETS,
+      matches: SEED_MATCHES,
+      fantasyEvents: SEED_FANTASY_EVENTS,
+      manualAdjustments: SEED_MANUAL_ADJUSTMENTS,
+      scoringValues: DEFAULT_SCORING_VALUES,
+      auditLog: [],
+    };
+    const result = computeDailyProgression(data);
+    for (const s of result.series) {
+      expect(s.finalTotal).toBe(getManagerTotal(data, s.manager.id));
+    }
   });
 });
