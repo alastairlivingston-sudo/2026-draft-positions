@@ -329,10 +329,20 @@ export interface DailyProgression {
  * getManagerTotal for well-formed data, and per-day ranks reuse the
  * leaderboard tie-break (higher total, then manager name) so the rank view
  * matches the table.
+ *
+ * Events are dated by the day their *match* kicked off - the real World Cup
+ * day the points relate to - not by the row's `createdAt`. That matters
+ * because result events (clean sheets, team win/loss bonuses) are deleted
+ * and re-derived on every ingest run, so their `createdAt` tracks the last
+ * cron run rather than the match, which would otherwise pile whole days of
+ * points onto "today" and leave gaps on the days they were actually earned.
+ * Events with no match (manual adjustments, and the rare match-less event)
+ * fall back to `createdAt`.
  */
 export function computeDailyProgression(data: LeagueData): DailyProgression {
   const { managers } = data;
   const managerIds = new Set(managers.map((m) => m.id));
+  const kickoffByMatch = new Map(data.matches.map((m) => [m.id, m.kickoff]));
 
   // managerId -> dateKey -> net points scored that day
   const deltas = new Map<string, Map<string, number>>();
@@ -350,7 +360,10 @@ export function computeDailyProgression(data: LeagueData): DailyProgression {
     byDay.set(key, (byDay.get(key) ?? 0) + points);
   };
 
-  for (const event of data.fantasyEvents) addDelta(event.managerId, event.createdAt, event.points);
+  for (const event of data.fantasyEvents) {
+    const when = (event.matchId ? kickoffByMatch.get(event.matchId) : undefined) ?? event.createdAt;
+    addDelta(event.managerId, when, event.points);
+  }
   for (const adjustment of data.manualAdjustments) addDelta(adjustment.managerId, adjustment.createdAt, adjustment.points);
 
   if (dateKeys.size === 0) {

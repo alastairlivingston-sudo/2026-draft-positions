@@ -178,6 +178,48 @@ describe("computeDailyProgression", () => {
     expect(result.maxTotal).toBe(6);
   });
 
+  it("dates events by their match's kickoff day, not createdAt", () => {
+    // Both events were written at the same instant (as result events are when
+    // re-derived on a single ingest run) but belong to matches on different
+    // days - they must land on their kickoff days, not the ingest day.
+    const ingestedAt = "2026-06-20T09:00:00Z";
+    const data: LeagueData = {
+      managers,
+      squadAssets: [],
+      matches: [
+        makeMatch({ id: "m1", kickoff: "2026-06-11T19:00:00Z" }),
+        makeMatch({ id: "m2", kickoff: "2026-06-13T19:00:00Z" }),
+      ],
+      fantasyEvents: [
+        makeEvent({ id: "e1", managerId: "a", matchId: "m1", points: 4, createdAt: ingestedAt }),
+        makeEvent({ id: "e2", managerId: "a", matchId: "m2", points: 2, createdAt: ingestedAt }),
+      ],
+      manualAdjustments: [],
+      scoringValues: {} as LeagueData["scoringValues"],
+      auditLog: [],
+    };
+    const result = computeDailyProgression(data);
+    expect(result.days.map((d) => d.date)).toEqual(["2026-06-11", "2026-06-12", "2026-06-13"]);
+    expect(result.series.find((s) => s.manager.id === "a")!.totals).toEqual([4, 4, 6]);
+  });
+
+  it("falls back to createdAt for an event with no match", () => {
+    const data: LeagueData = {
+      managers,
+      squadAssets: [],
+      matches: [],
+      fantasyEvents: [
+        makeEvent({ id: "e1", managerId: "a", matchId: null, points: 3, createdAt: "2026-06-11T20:00:00Z" }),
+      ],
+      manualAdjustments: [],
+      scoringValues: {} as LeagueData["scoringValues"],
+      auditLog: [],
+    };
+    const result = computeDailyProgression(data);
+    expect(result.days.map((d) => d.date)).toEqual(["2026-06-11"]);
+    expect(result.series.find((s) => s.manager.id === "a")!.totals).toEqual([3]);
+  });
+
   it("tracks negative dips and reports minTotal", () => {
     const result = computeDailyProgression(
       progressionData([makeEvent({ id: "e1", managerId: "a", type: "team_loss", points: -1 })]),
