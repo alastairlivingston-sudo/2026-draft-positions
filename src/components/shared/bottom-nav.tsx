@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, LayoutDashboard, ScrollText, Trophy } from "lucide-react";
+import { BookOpen, CalendarDays, LayoutDashboard, LineChart, ScrollText, Trophy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ const BASE = "/league/world-cup-draft";
 const NAV_ITEMS = [
   { href: BASE, label: "League", icon: Trophy, match: (p: string) => p === BASE || p.startsWith(`${BASE}/manager`) },
   { href: `${BASE}/matches`, label: "Matches", icon: CalendarDays, match: (p: string) => p.startsWith(`${BASE}/matches`) },
+  { href: `${BASE}/trends`, label: "Race", icon: LineChart, match: (p: string) => p.startsWith(`${BASE}/trends`) },
   { href: `${BASE}/events`, label: "Feed", icon: ScrollText, match: (p: string) => p.startsWith(`${BASE}/events`) },
   { href: `${BASE}/rules`, label: "Rules", icon: BookOpen, match: (p: string) => p.startsWith(`${BASE}/rules`) },
   { href: `${BASE}/admin`, label: "Admin", icon: LayoutDashboard, match: (p: string) => p.startsWith(`${BASE}/admin`) },
